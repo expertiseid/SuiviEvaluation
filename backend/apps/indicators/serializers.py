@@ -1,0 +1,125 @@
+from django.db.models import Sum
+from rest_framework import serializers
+
+from .models import Indicateur, PalierAlerte, ParametresAlerte, ValeurIndicateur
+from .services import palier_pour_taux, paliers_pour, taux_realisation, valeur_realisee_totale
+
+
+class ParametresAlerteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ParametresAlerte
+        fields = ("seuil_echeance_jours",)
+
+
+class PalierAlerteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PalierAlerte
+        fields = ("id", "projet", "indicateur", "activite", "borne_min", "libelle", "couleur")
+
+
+class ValeurIndicateurSerializer(serializers.ModelSerializer):
+    """
+    valeur_realisee est ce qui a été réalisé PENDANT cette période précise
+    (pas un cumul) — taux_realisation compare donc la somme cumulée
+    jusqu'à cette période (elle incluse) à la cible, pas la seule valeur de
+    cette ligne.
+    """
+
+    saisi_par_nom = serializers.StringRelatedField(source="saisi_par", read_only=True)
+    taux_realisation = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ValeurIndicateur
+        fields = (
+            "id",
+            "indicateur",
+            "periode_debut",
+            "periode_fin",
+            "valeur_realisee",
+            "date_saisie",
+            "saisi_par",
+            "saisi_par_nom",
+            "commentaire",
+            "taux_realisation",
+        )
+        read_only_fields = ("date_saisie", "saisi_par")
+
+    def get_taux_realisation(self, obj):
+        cumule = (
+            obj.indicateur.valeurs.filter(periode_fin__lte=obj.periode_fin).aggregate(total=Sum("valeur_realisee"))[
+                "total"
+            ]
+            or 0
+        )
+        return taux_realisation(cumule, obj.indicateur.valeur_cible)
+
+    def create(self, validated_data):
+        validated_data["saisi_par"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class IndicateurSerializer(serializers.ModelSerializer):
+    valeurs = ValeurIndicateurSerializer(many=True, read_only=True)
+    taux_realisation_actuel = serializers.SerializerMethodField()
+    palier_actuel = serializers.SerializerMethodField()
+    elements_strategiques_libelles = serializers.StringRelatedField(
+        source="elements_strategiques", many=True, read_only=True
+    )
+    projet_nom = serializers.StringRelatedField(source="projet", read_only=True)
+    projet_rattache_nom = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Indicateur
+        fields = (
+            "id",
+            "libelle",
+            "unite",
+            "valeur_reference",
+            "valeur_reference_date",
+            "valeur_cible",
+            "frequence_collecte",
+            "projet",
+            "projet_nom",
+            "projet_rattache_nom",
+            "objectif_general",
+            "objectif_specifique",
+            "activite",
+            "elements_strategiques",
+            "elements_strategiques_libelles",
+            "valeurs",
+            "taux_realisation_actuel",
+            "palier_actuel",
+        )
+
+    def get_taux_realisation_actuel(self, obj):
+        return taux_realisation(valeur_realisee_totale(obj), obj.valeur_cible)
+
+    def get_palier_actuel(self, obj):
+        taux = taux_realisation(valeur_realisee_totale(obj), obj.valeur_cible)
+        palier = palier_pour_taux(taux, paliers_pour(indicateur=obj, projet=obj.projet_rattache))
+        if palier is None:
+            return None
+        return {"id": palier.id, "libelle": palier.libelle, "couleur": palier.couleur, "borne_min": palier.borne_min}
+
+    def get_projet_rattache_nom(self, obj):
+        """
+        Nom du projet auquel l'indicateur se rattache, quel que soit le
+        niveau de rattachement (projet direct, objectif général/spécifique,
+        activité) — None seulement pour un indicateur purement stratégique,
+        sans aucun rattachement à la hiérarchie projet.
+        """
+        projet = obj.projet_rattache
+        return projet.nom if projet else None
+
+    RATTACHEMENT_FIELDS = ("projet", "objectif_general", "objectif_specifique", "activite")
+
+    def validate(self, attrs):
+        valeurs = [
+            attrs.get(champ, getattr(self.instance, champ, None)) for champ in self.RATTACHEMENT_FIELDS
+        ]
+        if sum(bool(v) for v in valeurs) > 1:
+            raise serializers.ValidationError(
+                "Un indicateur ne peut être rattaché qu'à un seul niveau parmi : "
+                "Projet, Objectif Général, Objectif Spécifique OU Activité (ou aucun, s'il est purement stratégique)."
+            )
+        return attrs

@@ -1,0 +1,90 @@
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
+
+from apps.core.permissions import HasGlobalVisibilityOrAssigned
+from apps.projects.queryset_filters import visible_projets_ids
+
+from .models import Document, DocumentVersion, Dossier, PieceJustificative
+from .serializers import (
+    DocumentSerializer,
+    DocumentVersionSerializer,
+    DossierSerializer,
+    PieceJustificativeSerializer,
+)
+
+
+class PieceJustificativeViewSet(viewsets.ModelViewSet):
+    queryset = PieceJustificative.objects.select_related("uploaded_by")
+    serializer_class = PieceJustificativeSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+    parser_classes = (MultiPartParser, FormParser)
+    filterset_fields = ("valeur_indicateur", "rapport_suivi", "type_document")
+
+
+class DossierViewSet(viewsets.ModelViewSet):
+    serializer_class = DossierSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+    filterset_fields = ("projet", "parent")
+
+    def get_queryset(self):
+        ids = visible_projets_ids(self.request.user)
+        from django.db.models import Q
+
+        return Dossier.objects.filter(Q(projet__isnull=True) | Q(projet__id__in=ids))
+
+
+class DocumentViewSet(viewsets.ModelViewSet):
+    serializer_class = DocumentSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+    parser_classes = (MultiPartParser, FormParser)
+    filterset_fields = ("dossier", "projet", "activite", "type_document")
+    search_fields = ("nom", "description")
+
+    def get_queryset(self):
+        ids = visible_projets_ids(self.request.user)
+        from django.db.models import Q
+
+        return Document.objects.select_related("cree_par").prefetch_related("versions").filter(
+            Q(projet__isnull=True) | Q(projet__id__in=ids)
+        )
+
+    def create(self, request, *args, **kwargs):
+        fichier = request.data.get("fichier")
+        if not fichier:
+            raise ValidationError({"fichier": "Un fichier est requis pour créer un document."})
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        document = serializer.save(cree_par=request.user)
+
+        DocumentVersion.objects.create(
+            document=document, fichier=fichier, version=1, uploaded_by=request.user
+        )
+        return Response(self.get_serializer(document).data, status=201)
+
+    @action(detail=True, methods=["get"])
+    def versions(self, request, pk=None):
+        document = self.get_object()
+        serializer = DocumentVersionSerializer(document.versions.all(), many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="nouvelle-version")
+    def nouvelle_version(self, request, pk=None):
+        document = self.get_object()
+        fichier = request.data.get("fichier")
+        if not fichier:
+            raise ValidationError({"fichier": "Un fichier est requis."})
+
+        derniere = document.derniere_version
+        nouvelle_version_num = (derniere.version + 1) if derniere else 1
+        version = DocumentVersion.objects.create(
+            document=document,
+            fichier=fichier,
+            version=nouvelle_version_num,
+            uploaded_by=request.user,
+            commentaire=request.data.get("commentaire", ""),
+        )
+        return Response(DocumentVersionSerializer(version).data, status=201)

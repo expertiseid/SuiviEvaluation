@@ -1,0 +1,30 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*.sqlite3
+/backend/staticfiles/
+/backend/media/
+.venv/
+venv/
+
+# Node / React
+node_modules/
+/frontend/dist/
+/frontend/.vite/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Office lock files
+~$*
+
+# Docker
+*.log

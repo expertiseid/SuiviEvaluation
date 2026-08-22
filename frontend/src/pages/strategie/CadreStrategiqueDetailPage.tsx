@@ -1,0 +1,734 @@
+import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Download, FileSpreadsheet, ListTree, Pencil, Plus, Search, Settings2, Trash2 } from "lucide-react";
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Collapse,
+  Group,
+  Modal,
+  Select,
+  Stack,
+  Switch,
+  Tabs,
+  Text,
+  Textarea,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
+  useCadreStrategique,
+  useCreateElementStrategique,
+  useCreateTypeNiveau,
+  useDeleteElementStrategique,
+  useDeleteTypeNiveau,
+  useElementsStrategiques,
+  useTypesNiveaux,
+  useUpdateElementStrategique,
+  useUpdateTypeNiveau,
+  telechargerExportStructuration,
+} from "../../api/strategy";
+import { BoutonModeEdition } from "../../components/common/BoutonModeEdition";
+import { EmptyState } from "../../components/common/EmptyState";
+import { confirmerSuppression } from "../../components/common/confirmerSuppression";
+import { correspond } from "../../utils/recherche";
+import { ImportStructurationModal } from "./ImportStructurationModal";
+import type { ElementStrategique, TypeNiveau } from "../../types";
+
+// Une couleur par rang de niveau (pas par nom) — fixe et cohérente sur tout
+// l'écran, pour distinguer visuellement "à quel niveau appartient ce nœud"
+// d'un coup d'œil, quel que soit le nom que l'organisation lui a donné.
+const PALETTE_NIVEAUX = ["teal", "blue", "grape", "orange", "cyan", "pink", "indigo", "lime"];
+
+function useCouleursParNiveau(niveaux: TypeNiveau[]) {
+  return useMemo(() => {
+    const tries = [...niveaux].sort((a, b) => a.ordre - b.ordre);
+    const map = new Map<number, string>();
+    tries.forEach((n, i) => map.set(n.id, PALETTE_NIVEAUX[i % PALETTE_NIVEAUX.length]));
+    return map;
+  }, [niveaux]);
+}
+
+function messageErreurSuppression(defaut: string) {
+  return `${defaut} — vérifie qu'aucun élément n'en dépend encore.`;
+}
+
+// ================== Onglet 1 : Configuration des niveaux ==================
+// Le paramétrage du gabarit (noms, ordre, saut de niveau) est totalement
+// séparé de la saisie de l'arbre — deux préoccupations distinctes, deux
+// onglets, pour ne jamais les mélanger sur le même écran. Tout est scopé au
+// cadre stratégique courant : ses niveaux n'apparaissent jamais dans un
+// autre cadre, et réciproquement.
+
+function NiveauModal({
+  opened,
+  onClose,
+  niveauExistant,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  niveauExistant?: TypeNiveau | null;
+}) {
+  const updateNiveau = useUpdateTypeNiveau();
+  const [nomNiveau, setNomNiveau] = useState(niveauExistant?.nom_niveau ?? "");
+  const [sautAutorise, setSautAutorise] = useState(niveauExistant?.saut_niveau_autorise ?? false);
+  const [aideCode, setAideCode] = useState(niveauExistant?.aide_code ?? "");
+
+  function reinitialiser() {
+    setNomNiveau(niveauExistant?.nom_niveau ?? "");
+    setSautAutorise(niveauExistant?.saut_niveau_autorise ?? false);
+    setAideCode(niveauExistant?.aide_code ?? "");
+  }
+
+  async function handleSave() {
+    if (!nomNiveau.trim() || !niveauExistant) return;
+    try {
+      await updateNiveau.mutateAsync({
+        id: niveauExistant.id,
+        payload: { nom_niveau: nomNiveau.trim(), saut_niveau_autorise: sautAutorise, aide_code: aideCode },
+      });
+      notifications.show({ message: "Niveau modifié", color: "green" });
+      onClose();
+    } catch {
+      notifications.show({ message: "Erreur lors de la modification du niveau", color: "red" });
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={onClose} onExitTransitionEnd={reinitialiser} title="Modifier le niveau">
+      <Stack gap="sm">
+        <TextInput
+          label="Nom du niveau"
+          description="Ex : « Orientation stratégique », « Priorité », « Pilier »..."
+          value={nomNiveau}
+          onChange={(e) => setNomNiveau(e.currentTarget.value)}
+          required
+        />
+        <TextInput
+          label="Aide à la saisie du code"
+          description="Exemple affiché comme indication (facultatif)"
+          placeholder="Ex : OS1"
+          value={aideCode}
+          onChange={(e) => setAideCode(e.currentTarget.value)}
+        />
+        <Switch
+          label="Autoriser à sauter ce niveau"
+          description="Un élément du niveau suivant pourra alors être rattaché directement à un ancêtre plus haut, sans passer par ce niveau."
+          checked={sautAutorise}
+          onChange={(e) => setSautAutorise(e.currentTarget.checked)}
+        />
+        <Group justify="flex-end">
+          <Button onClick={handleSave} loading={updateNiveau.isPending}>Enregistrer</Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+function ConfigurationNiveaux({
+  cadreStrategiqueId,
+  niveaux,
+  editionActive,
+}: {
+  cadreStrategiqueId: number;
+  niveaux: TypeNiveau[];
+  editionActive: boolean;
+}) {
+  const createNiveau = useCreateTypeNiveau();
+  const updateNiveau = useUpdateTypeNiveau();
+  const deleteNiveau = useDeleteTypeNiveau();
+  const [nomNouveauNiveau, setNomNouveauNiveau] = useState("");
+  const [niveauEnEdition, setNiveauEnEdition] = useState<TypeNiveau | null>(null);
+
+  const tries = useMemo(() => [...niveaux].sort((a, b) => a.ordre - b.ordre), [niveaux]);
+
+  async function deplacer(index: number, direction: -1 | 1) {
+    const autre = tries[index + direction];
+    const courant = tries[index];
+    if (!autre) return;
+
+    // La chaîne niveau_parent doit toujours refléter l'ordre affiché — sinon
+    // le niveau "racine" réel (niveau_parent=null) se désynchronise de la
+    // position 1 à l'écran, et les boutons "Ajouter" affichent le mauvais nom.
+    // On recalcule donc toute la chaîne à partir du nouvel ordre, pas
+    // seulement les deux niveaux échangés.
+    const apresEchange = tries
+      .map((n) => {
+        if (n.id === courant.id) return { ...n, ordre: autre.ordre };
+        if (n.id === autre.id) return { ...n, ordre: courant.ordre };
+        return n;
+      })
+      .sort((a, b) => a.ordre - b.ordre);
+
+    try {
+      await Promise.all(
+        apresEchange.map((niveau, i) => {
+          const original = tries.find((n) => n.id === niveau.id)!;
+          const parentAttendu = i === 0 ? null : apresEchange[i - 1].id;
+          const payload: Partial<TypeNiveau> = {};
+          if (niveau.ordre !== original.ordre) payload.ordre = niveau.ordre;
+          if (parentAttendu !== original.niveau_parent) payload.niveau_parent = parentAttendu;
+          return Object.keys(payload).length > 0
+            ? updateNiveau.mutateAsync({ id: niveau.id, payload })
+            : Promise.resolve();
+        }),
+      );
+    } catch {
+      notifications.show({ message: "Erreur lors du réordonnancement", color: "red" });
+    }
+  }
+
+  async function ajouterNiveau() {
+    if (!nomNouveauNiveau.trim()) {
+      notifications.show({ message: "Le nom du niveau est requis.", color: "orange" });
+      return;
+    }
+    const dernier = tries[tries.length - 1];
+    try {
+      await createNiveau.mutateAsync({
+        cadre_strategique: cadreStrategiqueId,
+        nom_niveau: nomNouveauNiveau.trim(),
+        ordre: dernier ? dernier.ordre + 1 : 1,
+        niveau_parent: dernier ? dernier.id : null,
+      });
+      notifications.show({ message: "Niveau ajouté", color: "green" });
+      setNomNouveauNiveau("");
+    } catch {
+      notifications.show({ message: "Erreur lors de l'ajout du niveau", color: "red" });
+    }
+  }
+
+  function supprimerNiveau(niveau: TypeNiveau) {
+    confirmerSuppression({
+      message: `Supprimer le niveau « ${niveau.nom_niveau} » ? Cette action est irréversible.`,
+      onConfirm: async () => {
+        try {
+          await deleteNiveau.mutateAsync(niveau.id);
+          notifications.show({ message: "Niveau supprimé", color: "green" });
+        } catch {
+          notifications.show({
+            message: messageErreurSuppression("Impossible de supprimer ce niveau"),
+            color: "red",
+          });
+        }
+      },
+    });
+  }
+
+  return (
+    <Card withBorder padding="lg" radius="md">
+      <Text fw={600} mb="xs">Configuration de la structuration</Text>
+      <Text size="sm" c="dimmed" mb="sm">
+        Nous définissons ici les niveaux propres à ce cadre stratégique (nombre, noms, ordre) — par exemple
+        « Plan » → « Orientation » → « Axe » → « Activité », ou « Priorité » → « Sous-priorité ». Cette
+        structuration reste propre à ce cadre, sans effet sur les autres.
+      </Text>
+
+      {tries.length === 0 ? (
+        <EmptyState icon={<ListTree size={32} strokeWidth={1.5} />} message="Aucun niveau défini pour l'instant — commence par en ajouter un ci-dessous." />
+      ) : (
+        <Stack gap={6} mb="sm">
+          {tries.map((niveau, index) => (
+            <Group key={niveau.id} gap={6} wrap="nowrap" justify="space-between">
+              <Group gap={6} wrap="nowrap">
+                <Text size="sm" c="dimmed" w={20}>{niveau.ordre}.</Text>
+                <Text size="sm" fw={500}>{niveau.nom_niveau}</Text>
+              </Group>
+              <Group gap={2} wrap="nowrap">
+                <Tooltip label="Monter">
+                  <ActionIcon size="sm" variant="subtle" disabled={index === 0} onClick={() => deplacer(index, -1)}>
+                    <ArrowUp size={13} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Descendre">
+                  <ActionIcon size="sm" variant="subtle" disabled={index === tries.length - 1} onClick={() => deplacer(index, 1)}>
+                    <ArrowDown size={13} />
+                  </ActionIcon>
+                </Tooltip>
+                {editionActive && (
+                <Group gap={2} wrap="nowrap">
+                  <Tooltip label="Modifier">
+                    <ActionIcon size="sm" variant="subtle" onClick={() => setNiveauEnEdition(niveau)}>
+                      <Pencil size={13} />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label="Supprimer">
+                    <ActionIcon size="sm" variant="subtle" color="red" loading={deleteNiveau.isPending} onClick={() => supprimerNiveau(niveau)}>
+                      <Trash2 size={13} />
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
+                )}
+              </Group>
+            </Group>
+          ))}
+        </Stack>
+      )}
+
+      <Group gap="xs" align="flex-end">
+        <TextInput
+          size="xs"
+          label="Ajouter un niveau"
+          placeholder="Ex : Orientation stratégique"
+          value={nomNouveauNiveau}
+          onChange={(e) => setNomNouveauNiveau(e.currentTarget.value)}
+          style={{ flex: 1 }}
+        />
+        <Button size="xs" variant="light" onClick={ajouterNiveau} loading={createNiveau.isPending}>
+          Ajouter
+        </Button>
+      </Group>
+
+      <NiveauModal opened={!!niveauEnEdition} onClose={() => setNiveauEnEdition(null)} niveauExistant={niveauEnEdition} />
+    </Card>
+  );
+}
+
+// ================== Onglet 2 : Arborescence & saisie ==================
+// Chaque nœud lit, via la chaîne niveau_parent de son propre TypeNiveau, le
+// niveau immédiatement suivant (rang + 1) pour générer dynamiquement le
+// libellé du bouton d'ajout — jamais de nom de niveau codé en dur.
+
+function ElementModal({
+  opened,
+  onClose,
+  typeNiveau,
+  elementParent,
+  elementExistant,
+  niveaux,
+  elements,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  typeNiveau: TypeNiveau | null;
+  elementParent: ElementStrategique | null;
+  elementExistant?: ElementStrategique | null;
+  niveaux: TypeNiveau[];
+  elements: ElementStrategique[];
+}) {
+  const createElement = useCreateElementStrategique();
+  const updateElement = useUpdateElementStrategique();
+  const [code, setCode] = useState(elementExistant?.code ?? "");
+  const [nom, setNom] = useState(elementExistant?.nom ?? "");
+  const [description, setDescription] = useState(elementExistant?.description ?? "");
+  const [parentId, setParentId] = useState<string | null>(
+    elementExistant?.element_parent ? String(elementExistant.element_parent) : null,
+  );
+
+  function reinitialiser() {
+    setCode(elementExistant?.code ?? "");
+    setNom(elementExistant?.nom ?? "");
+    setDescription(elementExistant?.description ?? "");
+    setParentId(elementExistant?.element_parent ? String(elementExistant.element_parent) : null);
+  }
+
+  // En édition, on retrouve le niveau de l'élément pour savoir si un
+  // rattachement est requis (et à quel niveau) — permet de changer le
+  // parent d'un élément déjà créé (ex : rattacher une Orientation existante
+  // à un nouveau Plan stratégique ajouté après coup).
+  const niveauDeLElement = elementExistant ? niveaux.find((n) => n.id === elementExistant.type_niveau) : typeNiveau;
+  const niveauParentAttendu = niveauDeLElement
+    ? niveaux.find((n) => n.id === niveauDeLElement.niveau_parent)
+    : undefined;
+  const optionsParent = niveauParentAttendu
+    ? elements
+        .filter((e) => e.type_niveau === niveauParentAttendu.id && e.id !== elementExistant?.id)
+        .map((e) => ({ value: String(e.id), label: e.code ? `${e.code} — ${e.nom}` : e.nom }))
+    : [];
+
+  async function handleSave() {
+    if (!nom.trim()) {
+      notifications.show({ message: "Le nom est requis.", color: "orange" });
+      return;
+    }
+    if (elementExistant && niveauParentAttendu && !parentId) {
+      notifications.show({ message: `Choisis un « ${niveauParentAttendu.nom_niveau} » de rattachement.`, color: "orange" });
+      return;
+    }
+    try {
+      if (elementExistant) {
+        await updateElement.mutateAsync({
+          id: elementExistant.id,
+          payload: {
+            code: code.trim(),
+            nom: nom.trim(),
+            description,
+            element_parent: parentId ? Number(parentId) : null,
+          },
+        });
+        notifications.show({ message: "Élément modifié", color: "green" });
+      } else if (typeNiveau) {
+        await createElement.mutateAsync({
+          type_niveau: typeNiveau.id,
+          element_parent: elementParent?.id ?? null,
+          code: code.trim(),
+          nom: nom.trim(),
+          description,
+        });
+        notifications.show({ message: "Élément ajouté", color: "green" });
+      }
+      onClose();
+    } catch {
+      notifications.show({ message: "Erreur lors de l'enregistrement", color: "red" });
+    }
+  }
+
+  const niveauActif = elementExistant ? null : typeNiveau;
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      onExitTransitionEnd={reinitialiser}
+      title={elementExistant ? "Modifier l'élément" : niveauActif ? `Ajouter — ${niveauActif.nom_niveau}` : "Ajouter un élément"}
+    >
+      <Stack gap="sm">
+        <TextInput
+          label="Code"
+          placeholder={(elementExistant ? undefined : niveauActif?.aide_code) || "Ex : 1.1"}
+          value={code}
+          onChange={(e) => setCode(e.currentTarget.value)}
+        />
+        <TextInput label="Nom" value={nom} onChange={(e) => setNom(e.currentTarget.value)} required />
+        <Textarea label="Description" minRows={2} value={description} onChange={(e) => setDescription(e.currentTarget.value)} />
+        {elementExistant && niveauParentAttendu && (
+          <Select
+            label={`Rattaché à (${niveauParentAttendu.nom_niveau})`}
+            data={optionsParent}
+            value={parentId}
+            onChange={setParentId}
+            searchable
+            required
+          />
+        )}
+        <Group justify="flex-end">
+          <Button onClick={handleSave} loading={createElement.isPending || updateElement.isPending}>
+            {elementExistant ? "Enregistrer" : "Ajouter"}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+function NoeudElement({
+  element,
+  niveaux,
+  couleurs,
+  profondeur,
+  enfantsParParent,
+  niveauEnfant,
+  onAjouter,
+  onModifier,
+  idsVisibles,
+  editionActive,
+}: {
+  element: ElementStrategique;
+  niveaux: TypeNiveau[];
+  couleurs: Map<number, string>;
+  profondeur: number;
+  enfantsParParent: Map<number | null, ElementStrategique[]>;
+  niveauEnfant: TypeNiveau | undefined;
+  onAjouter: (typeNiveau: TypeNiveau, parent: ElementStrategique) => void;
+  onModifier: (element: ElementStrategique) => void;
+  idsVisibles: Set<number> | null;
+  editionActive: boolean;
+}) {
+  const deleteElement = useDeleteElementStrategique();
+  const [ouvert, setOuvert] = useState(true);
+  const enfants = (enfantsParParent.get(element.id) ?? []).filter((e) => !idsVisibles || idsVisibles.has(e.id));
+  const enChercheOuvert = idsVisibles ? true : ouvert;
+  // Niveau à proposer aux ENFANTS de cet élément pour LEUR propre bouton
+  // "Ajouter" — un rang plus bas que niveauEnfant (le niveau des enfants de
+  // cet élément), donc dérivé de niveauEnfant et non de element.type_niveau
+  // (sinon on repasse le même rang à chaque génération au lieu d'avancer).
+  const niveauPourEnfantsDesEnfants = niveauEnfant
+    ? niveaux.find((n) => n.niveau_parent === niveauEnfant.id)
+    : undefined;
+  const couleur = couleurs.get(element.type_niveau) ?? "gray";
+
+  function supprimer() {
+    confirmerSuppression({
+      message: `Supprimer « ${element.nom} » ? Cette action est irréversible.`,
+      onConfirm: async () => {
+        try {
+          await deleteElement.mutateAsync(element.id);
+          notifications.show({ message: "Élément supprimé", color: "green" });
+        } catch {
+          notifications.show({
+            message: messageErreurSuppression("Impossible de supprimer cet élément"),
+            color: "red",
+          });
+        }
+      },
+    });
+  }
+
+  const estRacine = profondeur === 0;
+
+  return (
+    <Card
+      withBorder
+      padding={estRacine ? "md" : "sm"}
+      radius="sm"
+      mt={estRacine ? 0 : "xs"}
+      ml={profondeur * 24}
+      shadow={estRacine ? "xs" : undefined}
+      style={{
+        borderLeft: `${estRacine ? 6 : 4}px solid var(--mantine-color-${couleur}-6)`,
+        background: profondeur > 0 ? `var(--mantine-color-${couleur}-0)` : undefined,
+      }}
+    >
+      <Group justify="space-between" gap={6} wrap="nowrap">
+        <Group gap={6} wrap="nowrap">
+          {enfants.length > 0 && (
+            <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => setOuvert((v) => !v)}>
+              {ouvert ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </ActionIcon>
+          )}
+          <Badge color={couleur} variant={estRacine ? "filled" : "light"} size="sm">{element.type_niveau_nom}</Badge>
+          <Text size={estRacine ? "md" : "sm"} fw={estRacine ? 700 : 400}>
+            {element.code && <Text span fw={700}>{element.code} — </Text>}
+            {element.nom}
+          </Text>
+        </Group>
+        {editionActive && (
+        <Group gap={4} wrap="nowrap">
+          <Tooltip label="Modifier">
+            <ActionIcon size="sm" variant="subtle" onClick={() => onModifier(element)}>
+              <Pencil size={13} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Supprimer">
+            <ActionIcon size="sm" variant="subtle" color="red" loading={deleteElement.isPending} onClick={supprimer}>
+              <Trash2 size={13} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
+        )}
+      </Group>
+
+      {niveauEnfant && (
+        <Button size="xs" variant="subtle" leftSection={<Plus size={13} />} mt={6} onClick={() => onAjouter(niveauEnfant, element)}>
+          {`Ajouter ${niveauEnfant.nom_niveau}`}
+        </Button>
+      )}
+
+      <Collapse expanded={enChercheOuvert}>
+        {enfants.map((enfant) => (
+          <NoeudElement
+            key={enfant.id}
+            element={enfant}
+            niveaux={niveaux}
+            couleurs={couleurs}
+            profondeur={profondeur + 1}
+            enfantsParParent={enfantsParParent}
+            niveauEnfant={niveauPourEnfantsDesEnfants}
+            onAjouter={onAjouter}
+            onModifier={onModifier}
+            idsVisibles={idsVisibles}
+            editionActive={editionActive}
+          />
+        ))}
+      </Collapse>
+    </Card>
+  );
+}
+
+function Arborescence({
+  niveaux,
+  elements,
+  editionActive,
+}: {
+  niveaux: TypeNiveau[];
+  elements: ElementStrategique[];
+  editionActive: boolean;
+}) {
+  const [modalAjout, setModalAjout] = useState<{ typeNiveau: TypeNiveau; parent: ElementStrategique | null } | null>(null);
+  const [elementEnEdition, setElementEnEdition] = useState<ElementStrategique | null>(null);
+  const [recherche, setRecherche] = useState("");
+  const couleurs = useCouleursParNiveau(niveaux);
+
+  // Niveau racine = celui sans niveau_parent (rang 1 de la chaîne).
+  const niveauRacine = niveaux.find((n) => n.niveau_parent === null);
+
+  const enfantsParParent = useMemo(() => {
+    const map = new Map<number | null, ElementStrategique[]>();
+    for (const el of elements) {
+      const cle = el.element_parent;
+      if (!map.has(cle)) map.set(cle, []);
+      map.get(cle)!.push(el);
+    }
+    return map;
+  }, [elements]);
+
+  const racines = enfantsParParent.get(null) ?? [];
+  const arbreVide = racines.length === 0;
+
+  // Un élément est visible s'il correspond lui-même à la recherche, ou si un
+  // de ses descendants y correspond — pour ne jamais masquer le chemin vers
+  // un résultat trouvé en profondeur.
+  const idsVisibles = useMemo(() => {
+    if (!recherche.trim()) return null;
+    const visibles = new Set<number>();
+    function visiter(element: ElementStrategique): boolean {
+      const enfants = enfantsParParent.get(element.id) ?? [];
+      const unEnfantVisible = enfants.map(visiter).some(Boolean);
+      const soiMatch = correspond(element.nom, recherche) || correspond(element.code ?? "", recherche);
+      if (soiMatch || unEnfantVisible) {
+        visibles.add(element.id);
+        return true;
+      }
+      return false;
+    }
+    racines.forEach(visiter);
+    return visibles;
+  }, [racines, enfantsParParent, recherche]);
+
+  const racinesFiltrees = idsVisibles ? racines.filter((r) => idsVisibles.has(r.id)) : racines;
+
+  return (
+    <Card withBorder padding="lg" radius="md" mih={480}>
+      <Group justify="space-between" mb="sm">
+        <Text fw={600}>Arborescence</Text>
+        {niveauRacine && (
+          <Button size="sm" leftSection={<Plus size={14} />} onClick={() => setModalAjout({ typeNiveau: niveauRacine, parent: null })}>
+            {arbreVide ? `Créer ${niveauRacine.nom_niveau}` : `Ajouter ${niveauRacine.nom_niveau}`}
+          </Button>
+        )}
+      </Group>
+
+      {!arbreVide && (
+        <TextInput
+          placeholder="Rechercher un élément…"
+          leftSection={<Search size={15} />}
+          value={recherche}
+          onChange={(e) => setRecherche(e.currentTarget.value)}
+          maw={400}
+          mb="sm"
+        />
+      )}
+
+      {!niveauRacine ? (
+        <EmptyState
+          icon={<ListTree size={32} strokeWidth={1.5} />}
+          message="Aucun niveau n'est configuré — passe d'abord par l'onglet « Configuration des niveaux »."
+        />
+      ) : arbreVide ? (
+        <EmptyState icon={<ListTree size={32} strokeWidth={1.5} />} message={`Aucun élément « ${niveauRacine.nom_niveau} » pour le moment.`} />
+      ) : racinesFiltrees.length === 0 ? (
+        <EmptyState icon={<ListTree size={32} strokeWidth={1.5} />} message="Aucun élément ne correspond à la recherche." />
+      ) : (
+        <Box style={{ overflowX: "auto" }}>
+          <Stack gap="lg">
+          {racinesFiltrees.map((racine) => (
+            <NoeudElement
+              key={racine.id}
+              element={racine}
+              niveaux={niveaux}
+              couleurs={couleurs}
+              profondeur={0}
+              enfantsParParent={enfantsParParent}
+              niveauEnfant={niveaux.find((n) => n.niveau_parent === racine.type_niveau)}
+              onAjouter={(typeNiveau, parent) => setModalAjout({ typeNiveau, parent })}
+              onModifier={setElementEnEdition}
+              idsVisibles={idsVisibles}
+              editionActive={editionActive}
+            />
+          ))}
+          </Stack>
+        </Box>
+      )}
+
+      <ElementModal
+        opened={!!modalAjout}
+        onClose={() => setModalAjout(null)}
+        typeNiveau={modalAjout?.typeNiveau ?? null}
+        elementParent={modalAjout?.parent ?? null}
+        niveaux={niveaux}
+        elements={elements}
+      />
+      <ElementModal
+        opened={!!elementEnEdition}
+        onClose={() => setElementEnEdition(null)}
+        typeNiveau={null}
+        elementParent={null}
+        elementExistant={elementEnEdition}
+        niveaux={niveaux}
+        elements={elements}
+      />
+    </Card>
+  );
+}
+
+// ================== Page ==================
+
+export function CadreStrategiqueDetailPage() {
+  const { id } = useParams();
+  const cadreId = Number(id);
+  const { data: cadre } = useCadreStrategique(cadreId);
+  const { data: niveaux, isLoading: chargementNiveaux } = useTypesNiveaux(cadreId);
+  const { data: elements, isLoading: chargementElements } = useElementsStrategiques({ cadre_strategique: cadreId });
+  const [modalImportOuvert, setModalImportOuvert] = useState(false);
+  const [editionActive, setEditionActive] = useState(false);
+
+  return (
+    <Stack gap="md">
+      <Group justify="space-between">
+        <Group gap="xs">
+          <ActionIcon component={Link} to="/strategie" variant="subtle" color="gray">
+            <ArrowLeft size={18} />
+          </ActionIcon>
+          <Title order={2}>{cadre?.nom ?? "Cadre stratégique"}</Title>
+        </Group>
+        <Group gap="xs">
+          <BoutonModeEdition actif={editionActive} onToggle={() => setEditionActive((v) => !v)} />
+          <Button
+            variant="light"
+            leftSection={<Download size={16} />}
+            onClick={() => telechargerExportStructuration(cadreId, cadre?.nom ?? String(cadreId))}
+          >
+            Exporter en Excel
+          </Button>
+          <Button variant="light" leftSection={<FileSpreadsheet size={16} />} onClick={() => setModalImportOuvert(true)}>
+            Importer depuis Excel
+          </Button>
+        </Group>
+      </Group>
+
+      {chargementNiveaux || chargementElements ? (
+        <Text c="dimmed">Chargement…</Text>
+      ) : (
+        <Tabs defaultValue="arborescence" keepMounted={false}>
+          <Tabs.List>
+            <Tabs.Tab value="configuration" leftSection={<Settings2 size={15} />}>
+              Configuration des niveaux
+            </Tabs.Tab>
+            <Tabs.Tab value="arborescence" leftSection={<ListTree size={15} />}>
+              Arborescence &amp; saisie
+            </Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="configuration" pt="md">
+            <ConfigurationNiveaux cadreStrategiqueId={cadreId} niveaux={niveaux ?? []} editionActive={editionActive} />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="arborescence" pt="md">
+            <Arborescence niveaux={niveaux ?? []} elements={elements ?? []} editionActive={editionActive} />
+          </Tabs.Panel>
+        </Tabs>
+      )}
+
+      <ImportStructurationModal
+        opened={modalImportOuvert}
+        onClose={() => setModalImportOuvert(false)}
+        cadreStrategiqueId={cadreId}
+      />
+    </Stack>
+  );
+}

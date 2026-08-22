@@ -1,0 +1,7 @@
+from django.apps import AppConfig
+
+
+class IntervenantsConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.intervenants"
+    label = "intervenants"

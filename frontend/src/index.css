@@ -1,0 +1,30 @@
+:root {
+  --app-bg: #f4f6f7;
+  --app-border: #e3e8ea;
+  --app-shadow: 0 2px 8px rgba(16, 24, 32, 0.06);
+  --app-shadow-hover: 0 8px 20px rgba(16, 24, 32, 0.1);
+  --app-radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.stat-card:hover {
+  box-shadow: var(--app-shadow-hover);
+  transform: translateY(-2px);
+}
+

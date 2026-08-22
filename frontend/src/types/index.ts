@@ -1,0 +1,611 @@
+export type Role =
+  | "ADMIN"
+  | "COORDO_GENERAL"
+  | "CHARGE_SE"
+  | "CHEF_PROJET"
+  | "CHEF_SERVICE"
+  | "ANIMATEUR_TERRAIN";
+
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: Role;
+  telephone: string;
+  zones_affectees: number[];
+  is_active: boolean;
+}
+
+export interface NiveauAdministratif {
+  id: number;
+  pays: string;
+  nom_niveau: string;
+  ordre: number;
+  niveau_parent: number | null;
+  niveau_parent_nom: string | null;
+  saut_niveau_autorise: boolean;
+  aide_code: string;
+}
+
+export interface Zone {
+  id: number;
+  nom: string;
+  code: string;
+  niveau_administratif: number;
+  niveau_administratif_nom: string;
+  pays: string;
+  parent: number | null;
+  parent_nom: string | null;
+}
+
+export interface Partenaire {
+  id: number;
+  nom: string;
+  type: "BAILLEUR" | "MISE_EN_OEUVRE";
+  contact: string;
+  email: string;
+  telephone: string;
+}
+
+export interface Bailleur {
+  id: number;
+  nom: string;
+  type: "INSTITUTIONNEL" | "FONDATION" | "COOPERATION_BILATERALE" | "AUTRE";
+  contact: string;
+}
+
+export interface Financement {
+  id: number;
+  projet: number;
+  bailleur: number;
+  bailleur_nom: string;
+  montant_finance: string;
+}
+
+export interface CadreStrategique {
+  id: number;
+  nom: string;
+  description: string;
+  created_at: string;
+}
+
+export interface TypeNiveau {
+  id: number;
+  cadre_strategique: number;
+  nom_niveau: string;
+  ordre: number;
+  niveau_parent: number | null;
+  niveau_parent_nom: string | null;
+  saut_niveau_autorise: boolean;
+  aide_code: string;
+}
+
+export interface ElementStrategique {
+  id: number;
+  type_niveau: number;
+  type_niveau_nom: string;
+  element_parent: number | null;
+  element_parent_nom: string | null;
+  code: string;
+  nom: string;
+  description: string;
+}
+
+export interface Intervenant {
+  id: number;
+  nom: string;
+  prenom: string;
+  fonction: string;
+  contact: string;
+  utilisateur: number | null;
+  utilisateur_nom: string | null;
+  projets_associes: number[];
+  activites_associees: number[];
+}
+
+export type StatutProjet = "EN_PREPARATION" | "EN_COURS" | "CLOTURE";
+export type TypeMiseEnOeuvre = "DIRECT" | "CONSORTIUM";
+export type StatutActivite = "NON_REALISEE" | "EN_COURS" | "REALISEE";
+
+export interface SousActivite {
+  id: number;
+  activite: number;
+  libelle: string;
+  axe_strategique: number | null;
+  axe_strategique_libelle: string | null;
+  quantite_prevue: string | null;
+  quantite_realisee: string | null;
+  unite_quantite: string;
+  date_debut: string | null;
+  date_fin: string | null;
+  statut: "PLANIFIEE" | "EN_COURS" | "TERMINEE";
+}
+
+export interface Equipe {
+  id: number;
+  nom: string;
+  membres: number[];
+  membres_noms: string[];
+  date_debut_contrat: string | null;
+  date_fin_contrat: string | null;
+}
+
+export interface Activite {
+  id: number;
+  objectif_specifique: number;
+  code_activite: string;
+  libelle: string;
+  statut: StatutActivite;
+  axe_strategique: number | null;
+  axe_strategique_libelle: string | null;
+  budget_alloue: string | null;
+  budget_realise: string | null;
+  valeur_reference: string | null;
+  quantite_prevue: string | null;
+  quantite_realisee: string | null;
+  unite_quantite: string;
+  date_debut: string | null;
+  date_fin: string | null;
+  date_debut_reelle: string | null;
+  date_fin_reelle: string | null;
+  nb_jours_planifies: number | null;
+  responsables: number[];
+  responsables_noms: string[];
+  responsable: number | null;
+  responsable_compte_nom: string | null;
+  equipe_responsable: number | null;
+  equipe_responsable_nom: string | null;
+  sous_activites: SousActivite[];
+  taux_realisation: number | null;
+  taux_execution_financiere: number | null;
+  alerte_retard: boolean;
+}
+
+export interface ObjectifSpecifique {
+  id: number;
+  objectif_general: number;
+  libelle: string;
+  description: string;
+  activites: Activite[];
+}
+
+export interface ObjectifGeneral {
+  id: number;
+  projet: number;
+  libelle: string;
+  description: string;
+  objectifs_specifiques: ObjectifSpecifique[];
+}
+
+export interface Projet {
+  id: number;
+  nom: string;
+  code: string;
+  pays: string[];
+  partenaire_bailleur: number | null;
+  partenaire_bailleur_nom: string | null;
+  partenaire_mise_en_oeuvre: number | null;
+  partenaire_mise_en_oeuvre_nom: string | null;
+  partenaires_consortium: number[];
+  partenaires_consortium_noms: string[];
+  budget_total: string;
+  fonds_propres: string;
+  financement_bailleurs_total: string;
+  date_debut: string;
+  date_fin: string;
+  statut: StatutProjet;
+  type_mise_en_oeuvre: TypeMiseEnOeuvre;
+  zones: number[];
+  cadre_strategique: number | null;
+  cadre_strategique_nom: string | null;
+  chef_de_projet_nom: string;
+  utilisateurs_affectes: number[];
+  cible_totale: number | null;
+  cible_hommes: number | null;
+  cible_femmes: number | null;
+  cible_jeunes: number | null;
+  cible_pdi: number | null;
+  elements_capitalisation: string;
+  objectif_general: ObjectifGeneral | null;
+}
+
+export type ProjetInput = Omit<
+  Projet,
+  | "id"
+  | "partenaire_bailleur_nom"
+  | "partenaire_mise_en_oeuvre_nom"
+  | "partenaires_consortium_noms"
+  | "objectif_general"
+  | "financement_bailleurs_total"
+  | "cadre_strategique_nom"
+>;
+
+export interface ParametresAlerte {
+  seuil_echeance_jours: number;
+}
+
+export interface PalierAlerte {
+  id: number;
+  projet: number | null;
+  indicateur: number | null;
+  activite: number | null;
+  borne_min: number;
+  libelle: string;
+  couleur: string;
+}
+
+export interface PorteeAlerte {
+  projetId?: number | null;
+  indicateurId?: number | null;
+  activiteId?: number | null;
+}
+
+export interface PalierAlerteInput {
+  borne_min: number;
+  libelle: string;
+  couleur: string;
+}
+
+export interface PaliersAlerteResolus {
+  personnalise: boolean;
+  paliers: PalierAlerte[];
+}
+
+export interface ValeurIndicateur {
+  id: number;
+  indicateur: number;
+  periode_debut: string;
+  periode_fin: string;
+  valeur_realisee: string;
+  date_saisie: string;
+  saisi_par: number;
+  saisi_par_nom: string;
+  commentaire: string;
+  taux_realisation: number;
+}
+
+export interface Indicateur {
+  id: number;
+  libelle: string;
+  unite: string;
+  valeur_reference: string | null;
+  valeur_reference_date: string | null;
+  valeur_cible: string;
+  frequence_collecte: "MENSUELLE" | "TRIMESTRIELLE" | "SEMESTRIELLE" | "ANNUELLE";
+  projet: number | null;
+  projet_nom: string | null;
+  projet_rattache_nom: string | null;
+  objectif_general: number | null;
+  objectif_specifique: number | null;
+  activite: number | null;
+  elements_strategiques: number[];
+  elements_strategiques_libelles: string[];
+  valeurs: ValeurIndicateur[];
+  taux_realisation_actuel: number;
+  palier_actuel: { id: number; libelle: string; couleur: string; borne_min: number } | null;
+}
+
+export interface StatutParticulier {
+  id: number;
+  code: string;
+  libelle: string;
+}
+
+export interface ParticipationProjet {
+  id: number;
+  beneficiaire: number;
+  projet: number;
+  projet_nom: string;
+  date_inscription: string;
+  role_dans_projet: string;
+}
+
+export interface Beneficiaire {
+  id: number;
+  nom: string;
+  prenom: string;
+  sexe: "F" | "M";
+  date_naissance: string | null;
+  telephone: string;
+  numero_piece_identite: string;
+  type_piece: string;
+  pays: string;
+  zone: number | null;
+  zone_nom: string | null;
+  statuts_particuliers: number[];
+  participations: ParticipationProjet[];
+}
+
+export interface ImportBeneficiairesResultat {
+  crees: number;
+  erreurs: { ligne: number; message: string }[];
+  avertissements: { ligne: number; message: string }[];
+  doublons_detectes: number;
+}
+
+export interface ImportStructurationResultat {
+  niveaux_crees: number;
+  elements_crees: number;
+  elements_mis_a_jour: number;
+  erreurs: { ligne: number; message: string }[];
+}
+
+export interface ImportProjetResultat {
+  projet_id: number | null;
+  projet_code: string | null;
+  objectifs_generaux: number;
+  objectifs_specifiques_crees: number;
+  activites_creees: number;
+  sous_activites_creees: number;
+  erreurs: { ligne: number; message: string }[];
+  avertissements: { ligne: number; message: string }[];
+}
+
+export interface ImportIndicateursResultat {
+  crees: number;
+  erreurs: { ligne: number; message: string }[];
+  avertissements: { ligne: number; message: string }[];
+}
+
+export interface ImportPlanificationCompleteResultat {
+  cadre_strategique_id: number | null;
+  cadre_strategique_nom: string | null;
+  elements_strategiques_crees: number;
+  projet_id: number | null;
+  projet_code: string | null;
+  objectifs_generaux: number;
+  objectifs_specifiques_crees: number;
+  activites_creees: number;
+  sous_activites_creees: number;
+  indicateurs_crees: number;
+  beneficiaires_crees: number;
+  doublons_detectes: number;
+  erreurs: { ligne: number; message: string }[];
+  avertissements: { ligne: number; message: string }[];
+}
+
+export interface SignalementDoublon {
+  id: number;
+  beneficiaire_1: number;
+  beneficiaire_1_nom: string;
+  beneficiaire_2: number;
+  beneficiaire_2_nom: string;
+  score: number | null;
+  methode: "PIECE_IDENTITE" | "SIMILARITE";
+  statut: "SIGNALE" | "ECARTE" | "FUSIONNE";
+  traite_par: number | null;
+  date_traitement: string | null;
+}
+
+export type StatutRapport = "BROUILLON" | "SOUMIS" | "VALIDE";
+
+export interface RapportSuivi {
+  id: number;
+  projet: number;
+  projet_nom: string;
+  periode_debut: string;
+  periode_fin: string;
+  type_rapport: "MENSUEL" | "TRIMESTRIEL" | "AUTRE";
+  redige_par: number;
+  redige_par_nom: string;
+  contenu: string;
+  statut: StatutRapport;
+  date_validation: string | null;
+  valide_par: number | null;
+  valide_par_nom: string | null;
+  taux_execution_physique_global: number | null;
+  taux_execution_financiere_global: number | null;
+  statut_global: "ATTEINT" | "EN_RETARD" | "EN_COURS";
+  statistiques_zones: Record<string, number>;
+  statistiques_beneficiaires: { nombre_beneficiaires_uniques: number; doublons_detectes: number };
+}
+
+export interface PieceJustificative {
+  id: number;
+  fichier: string;
+  nom: string;
+  type_document: string;
+  uploaded_by: number;
+  uploaded_by_nom: string;
+  valeur_indicateur: number | null;
+  rapport_suivi: number | null;
+  created_at: string;
+}
+
+export type TypeNotification =
+  | "INDICATEUR_ALERTE"
+  | "RAPPORT_SOUMIS"
+  | "RAPPORT_VALIDE"
+  | "DOUBLON_SIGNALE"
+  | "ECHEANCE_ACTIVITE"
+  | "ACTIVITE_MODIFIEE";
+
+export interface AppNotification {
+  id: number;
+  type: TypeNotification;
+  titre: string;
+  message: string;
+  lien: string;
+  lu: boolean;
+  date_lecture: string | null;
+  created_at: string;
+}
+
+export interface Dossier {
+  id: number;
+  nom: string;
+  projet: number | null;
+  parent: number | null;
+  cree_par: number;
+  cree_par_nom: string;
+}
+
+export interface DocumentVersion {
+  id: number;
+  document: number;
+  fichier: string;
+  version: number;
+  uploaded_by: number;
+  uploaded_by_nom: string;
+  commentaire: string;
+  created_at: string;
+}
+
+export interface GedDocument {
+  id: number;
+  nom: string;
+  dossier: number | null;
+  projet: number | null;
+  activite: number | null;
+  type_document: string;
+  description: string;
+  cree_par: number;
+  cree_par_nom: string;
+  derniere_version: DocumentVersion | null;
+  nombre_versions: number;
+  created_at: string;
+}
+
+export interface RepartitionPalier {
+  libelle: string;
+  couleur: string;
+  count: number;
+}
+
+export interface DashboardConsolide {
+  nombre_projets: number;
+  budget_total: number;
+  nombre_beneficiaires: number;
+  indicateurs_par_statut: RepartitionPalier[];
+  projets: { id: number; code: string; nom: string; statut: StatutProjet; budget_total: string }[];
+}
+
+export interface DashboardProjet {
+  projet: { id: number; code: string; nom: string; statut: StatutProjet };
+  nombre_objectifs_generaux: number;
+  nombre_beneficiaires: number;
+  indicateurs: {
+    id: number;
+    libelle: string;
+    taux_realisation: number;
+    palier_actuel: { libelle: string; couleur: string } | null;
+  }[];
+  indicateurs_par_statut: RepartitionPalier[];
+}
+
+export interface Echeance {
+  type: "ACTIVITE" | "SOUS_ACTIVITE" | "PROJET";
+  id: number;
+  libelle: string;
+  projet_id: number;
+  projet_nom: string;
+  date_fin: string;
+  en_retard: boolean;
+  lien: string;
+}
+
+export interface PointSuivi {
+  id: number;
+  activite: number | null;
+  activite_libelle: string | null;
+  sous_activite: number | null;
+  sous_activite_libelle: string | null;
+  periode_debut: string;
+  periode_fin: string;
+  quantite_realisee: string | null;
+  budget_realise: string | null;
+  statut: string;
+  commentaire: string;
+  saisi_par: number;
+  saisi_par_nom: string;
+  date_saisie: string;
+}
+
+export interface SuiviHistoriquePoint {
+  id: number;
+  periode_debut: string;
+  periode_fin: string;
+  quantite_realisee: string | null;
+  quantite_cumulee: string | null;
+  budget_realise?: string | null;
+  budget_cumule?: string | null;
+  statut: string;
+  commentaire: string;
+}
+
+export interface SuiviHistoriqueValeurIndicateur {
+  id: number;
+  periode_debut: string;
+  periode_fin: string;
+  valeur_realisee: string;
+  valeur_cumulee: string;
+  commentaire: string;
+  taux: number;
+}
+
+export interface SuiviDashboardIndicateur {
+  id: number;
+  libelle: string;
+  unite: string;
+  valeur_reference: string | null;
+  valeur_cible: string;
+  taux_actuel: number;
+  palier_actuel: { id: number; libelle: string; couleur: string; borne_min: number } | null;
+  periode_debut_planifiee: string | null;
+  periode_fin_planifiee: string | null;
+  historique: SuiviHistoriqueValeurIndicateur[];
+}
+
+export interface SuiviDashboardSousActivite {
+  id: number;
+  libelle: string;
+  statut: string;
+  quantite_prevue: string | null;
+  unite_quantite: string;
+  date_debut: string | null;
+  date_fin: string | null;
+  historique: SuiviHistoriquePoint[];
+}
+
+export interface SuiviDashboardActivite {
+  id: number;
+  code_activite: string;
+  libelle: string;
+  statut: StatutActivite;
+  valeur_reference: string | null;
+  quantite_prevue: string | null;
+  unite_quantite: string;
+  budget_alloue: string | null;
+  date_debut: string | null;
+  date_fin: string | null;
+  taux_realisation: number | null;
+  taux_execution_financiere: number | null;
+  palier_actuel: { id: number; libelle: string; couleur: string; borne_min: number } | null;
+  sous_activites: SuiviDashboardSousActivite[];
+  historique: SuiviHistoriquePoint[];
+}
+
+export interface SuiviDashboard {
+  projet: { id: number; code: string; nom: string; statut: StatutProjet };
+  taux_execution_physique_global: number | null;
+  taux_execution_financiere_global: number | null;
+  statut_global: "ATTEINT" | "EN_RETARD" | "EN_COURS";
+  indicateurs: SuiviDashboardIndicateur[];
+  activites: SuiviDashboardActivite[];
+}
+
+export interface HistoriqueEntree {
+  date: string;
+  utilisateur: string | null;
+  type: string;
+  changements: { champ: string; ancienne_valeur: unknown; nouvelle_valeur: unknown }[];
+}
+
+export interface Paginated<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}

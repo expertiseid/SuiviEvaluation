@@ -1,0 +1,69 @@
+from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand
+
+from apps.notifications.models import Notification
+from apps.notifications.services import lister_echeances, notifier
+from apps.projects.models import Projet
+
+User = get_user_model()
+
+LIBELLE_TYPE = {
+    "ACTIVITE": "Activité",
+    "SOUS_ACTIVITE": "Sous-activité",
+    "PROJET": "Projet",
+}
+
+
+class Command(BaseCommand):
+    help = (
+        "Vérifie les activités, sous-activités et projets dont l'échéance est proche ou dépassée et "
+        "notifie tous les utilisateurs actifs. À planifier périodiquement (cron/service scheduler)."
+    )
+
+    def handle(self, *args, **options):
+        # Une échéance qui approche ou qui est dépassée concerne tout le monde par défaut, affecté
+        # au projet ou non — pas de restriction aux seuls utilisateurs_affectes (souvent vide en
+        # pratique), pour ne jamais laisser une échéance réelle passer inaperçue.
+        destinataires = list(User.objects.filter(is_active=True))
+        tous_projets_ids = list(Projet.objects.values_list("id", flat=True))
+
+        total = 0
+        for echeance in lister_echeances(tous_projets_ids):
+            type_libelle = LIBELLE_TYPE[echeance["type"]]
+            if echeance["type"] == "PROJET":
+                titre = (
+                    f"Projet arrivé à échéance : {echeance['libelle']}"
+                    if echeance["en_retard"]
+                    else f"Échéance de projet proche : {echeance['libelle']}"
+                )
+            else:
+                titre = (
+                    f"{type_libelle} en retard : {echeance['libelle']}"
+                    if echeance["en_retard"]
+                    else f"Échéance proche : {echeance['libelle']}"
+                )
+            total += self.notifier_echeance(
+                destinataires=destinataires,
+                titre=titre,
+                projet_nom=echeance["projet_nom"],
+                echeance=echeance["date_fin"],
+                lien=echeance["lien"],
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"{total} notification(s) d'échéance créée(s)."))
+
+    def notifier_echeance(self, *, destinataires, titre, projet_nom, echeance, lien):
+        deja_notifie = Notification.objects.filter(
+            destinataire__in=destinataires, type=Notification.Type.ECHEANCE_ACTIVITE, titre=titre
+        ).values_list("destinataire_id", flat=True)
+        a_notifier = [d for d in destinataires if d.id not in set(deja_notifie)]
+        if not a_notifier:
+            return 0
+        notifier(
+            a_notifier,
+            Notification.Type.ECHEANCE_ACTIVITE,
+            titre,
+            message=f"Projet {projet_nom} — échéance prévue le {echeance}.",
+            lien=lien,
+        )
+        return len(a_notifier)

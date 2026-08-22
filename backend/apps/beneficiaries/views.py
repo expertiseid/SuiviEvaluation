@@ -1,0 +1,115 @@
+from django.http import HttpResponse
+from django.utils import timezone
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
+
+from apps.accounts.constants import ROLE_CHARGE_SE
+from apps.core.permissions import HasGlobalVisibilityOrAssigned
+from apps.notifications.models import Notification
+from apps.notifications.services import notifier_par_role
+
+from .models import Beneficiaire, ParticipationProjet, SignalementDoublon, StatutParticulier
+from .serializers import (
+    BeneficiaireSerializer,
+    ParticipationProjetSerializer,
+    SignalementDoublonSerializer,
+    StatutParticulierSerializer,
+)
+from .services.duplicate_detection import rechercher_doublons
+from .services.import_excel import generer_modele_import, importer_beneficiaires
+
+
+class StatutParticulierViewSet(viewsets.ModelViewSet):
+    queryset = StatutParticulier.objects.all()
+    serializer_class = StatutParticulierSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+
+
+class BeneficiaireViewSet(viewsets.ModelViewSet):
+    queryset = Beneficiaire.objects.select_related("zone").prefetch_related(
+        "statuts_particuliers", "participations__projet"
+    )
+    serializer_class = BeneficiaireSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+    filterset_fields = ("sexe", "zone", "statuts_particuliers")
+    search_fields = ("nom", "prenom", "telephone", "numero_piece_identite")
+
+    @action(detail=False, methods=["get"], url_path="modele-import")
+    def modele_import(self, request):
+        contenu = generer_modele_import()
+        response = HttpResponse(
+            contenu, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = "attachment; filename=modele_import_beneficiaires.xlsx"
+        return response
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="importer",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def importer(self, request):
+        fichier = request.data.get("fichier")
+        if not fichier:
+            raise ValidationError({"fichier": "Un fichier Excel (.xlsx) est requis."})
+        try:
+            resultat = importer_beneficiaires(fichier, request.user)
+        except Exception as exc:  # fichier corrompu, mauvais format, etc.
+            raise ValidationError({"fichier": f"Impossible de lire ce fichier : {exc}"})
+        return Response(resultat)
+
+    @action(detail=True, methods=["post"], url_path="verifier-doublons")
+    def verifier_doublons(self, request, pk=None):
+        beneficiaire = self.get_object()
+        candidats = rechercher_doublons(beneficiaire)
+
+        signalements = []
+        for item in candidats:
+            b1, b2 = sorted([beneficiaire, item["candidat"]], key=lambda b: b.pk)
+            signalement, cree = SignalementDoublon.objects.get_or_create(
+                beneficiaire_1=b1,
+                beneficiaire_2=b2,
+                defaults={"score": item["score"], "methode": item["methode"]},
+            )
+            signalements.append(signalement)
+            if cree:
+                notifier_par_role(
+                    [ROLE_CHARGE_SE],
+                    Notification.Type.DOUBLON_SIGNALE,
+                    f"Doublon bénéficiaire potentiel : {b1} / {b2}",
+                    message=f"Détecté via {signalement.get_methode_display()} (score {signalement.score}).",
+                    lien="/doublons",
+                )
+
+        serializer = SignalementDoublonSerializer(signalements, many=True)
+        return Response(serializer.data)
+
+
+class ParticipationProjetViewSet(viewsets.ModelViewSet):
+    serializer_class = ParticipationProjetSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+    filterset_fields = ("beneficiaire", "projet")
+
+    def get_queryset(self):
+        from apps.projects.queryset_filters import visible_projets_ids
+
+        return ParticipationProjet.objects.filter(projet__id__in=visible_projets_ids(self.request.user))
+
+
+class SignalementDoublonViewSet(viewsets.ModelViewSet):
+    queryset = SignalementDoublon.objects.select_related("beneficiaire_1", "beneficiaire_2")
+    serializer_class = SignalementDoublonSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+    filterset_fields = ("statut", "methode")
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        nouveau_statut = serializer.validated_data.get("statut", instance.statut)
+        if nouveau_statut != SignalementDoublon.Statut.SIGNALE and instance.statut == SignalementDoublon.Statut.SIGNALE:
+            serializer.save(traite_par=self.request.user, date_traitement=timezone.now())
+        else:
+            serializer.save()

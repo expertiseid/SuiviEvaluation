@@ -1,0 +1,112 @@
+import { useState } from "react";
+import { Download, Upload } from "lucide-react";
+import { Alert, Button, FileInput, Group, List, Modal, Stack, Text } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useImporterStructuration, telechargerModeleImportStructuration } from "../../api/strategy";
+import type { ImportStructurationResultat } from "../../types";
+
+export function ImportStructurationModal({
+  opened,
+  onClose,
+  cadreStrategiqueId,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  cadreStrategiqueId: number;
+}) {
+  const importer = useImporterStructuration();
+  const [fichier, setFichier] = useState<File | null>(null);
+  const [resultat, setResultat] = useState<ImportStructurationResultat | null>(null);
+
+  function fermer() {
+    setFichier(null);
+    setResultat(null);
+    onClose();
+  }
+
+  async function handleImporter() {
+    if (!fichier) {
+      notifications.show({ message: "Choisis d'abord un fichier Excel.", color: "orange" });
+      return;
+    }
+    const formData = new FormData();
+    formData.append("fichier", fichier);
+    formData.append("cadre_strategique", String(cadreStrategiqueId));
+    try {
+      const res = await importer.mutateAsync(formData);
+      setResultat(res);
+      if (res.elements_crees > 0 || res.elements_mis_a_jour > 0) {
+        notifications.show({
+          message: `${res.elements_crees} élément(s) créé(s), ${res.elements_mis_a_jour} mis à jour`,
+          color: "green",
+        });
+      }
+    } catch {
+      notifications.show({ message: "Erreur lors de l'import — vérifie le format du fichier.", color: "red" });
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={fermer} title="Importer la structuration depuis Excel" size="lg">
+      <Stack gap="md">
+        <Alert color="blue" variant="light">
+          Utilise le modèle ci-dessous : une colonne = un niveau. Écris chaque élément dans la colonne de
+          son niveau, une seule colonne par ligne — son rattachement au niveau supérieur se déduit
+          automatiquement du dernier élément écrit juste à gauche, au-dessus. Les niveaux manquants sont
+          créés automatiquement. Réimporter le même fichier met à jour les éléments déjà importés au lieu
+          de les dupliquer.
+        </Alert>
+
+        <Button
+          variant="light"
+          leftSection={<Download size={16} />}
+          onClick={() => telechargerModeleImportStructuration(cadreStrategiqueId)}
+        >
+          Télécharger le modèle Excel
+        </Button>
+
+        <Group align="flex-end">
+          <FileInput
+            label="Fichier à importer"
+            placeholder="Choisir un fichier .xlsx"
+            accept=".xlsx"
+            value={fichier}
+            onChange={setFichier}
+            style={{ flex: 1 }}
+          />
+          <Button leftSection={<Upload size={16} />} onClick={handleImporter} loading={importer.isPending}>
+            Importer
+          </Button>
+        </Group>
+
+        {resultat && (
+          <Stack gap="xs">
+            <Alert
+              color={resultat.elements_crees > 0 || resultat.elements_mis_a_jour > 0 ? "green" : "orange"}
+              title="Résultat de l'import"
+            >
+              <Text size="sm">
+                <strong>{resultat.niveaux_crees}</strong> niveau(x) créé(s), <strong>{resultat.elements_crees}</strong> élément(s)
+                créé(s), <strong>{resultat.elements_mis_a_jour}</strong> mis à jour.
+              </Text>
+            </Alert>
+
+            {resultat.erreurs.length > 0 && (
+              <Alert color="red" title={`${resultat.erreurs.length} ligne(s) ignorée(s)`}>
+                <List size="sm">
+                  {resultat.erreurs.map((e, i) => (
+                    <List.Item key={i}>Ligne {e.ligne} : {e.message}</List.Item>
+                  ))}
+                </List>
+              </Alert>
+            )}
+          </Stack>
+        )}
+
+        <Group justify="flex-end">
+          <Button variant="subtle" onClick={fermer}>Fermer</Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
