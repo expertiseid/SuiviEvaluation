@@ -6,6 +6,8 @@ export type Role =
   | "CHEF_SERVICE"
   | "ANIMATEUR_TERRAIN";
 
+export type NiveauAcces = "LECTURE_SEULE" | "LECTURE_ECRITURE";
+
 export interface User {
   id: number;
   username: string;
@@ -13,6 +15,7 @@ export interface User {
   first_name: string;
   last_name: string;
   role: Role;
+  niveau_acces: NiveauAcces;
   telephone: string;
   zones_affectees: number[];
   is_active: boolean;
@@ -69,6 +72,45 @@ export interface CadreStrategique {
   nom: string;
   description: string;
   created_at: string;
+}
+
+export interface RecapCadreStrategique {
+  budget_total: number;
+  nombre_activites_total: number;
+  nombre_indicateurs_total: number;
+  taux_execution_physique_moyen: number | null;
+  taux_execution_financiere_moyen: number | null;
+  projets: {
+    id: number;
+    code: string;
+    nom: string;
+    statut: StatutProjet;
+    date_debut: string;
+    date_fin: string;
+    chef_de_projet_nom: string;
+    bailleur_nom: string | null;
+    budget_total: string;
+    budget_activites_alloue_total: string;
+    budget_activites_realise_total: string;
+    financement_bailleurs_total: string;
+    taux_execution_physique: number | null;
+    taux_execution_financiere: number | null;
+    nombre_activites: number;
+    nombre_indicateurs: number;
+    activites: {
+      id: number;
+      code: string;
+      libelle: string;
+      statut: string;
+      taux_realisation: number | null;
+      quantite_realisee: string | null;
+      quantite_prevue: string | null;
+      unite_quantite: string;
+      budget_alloue: string | null;
+      budget_realise: string | null;
+    }[];
+    indicateurs: { id: number; libelle: string; valeur_realisee: string; valeur_cible: string; unite: string }[];
+  }[];
 }
 
 export interface TypeNiveau {
@@ -151,6 +193,7 @@ export interface Activite {
   date_debut_reelle: string | null;
   date_fin_reelle: string | null;
   nb_jours_planifies: number | null;
+  date_rappel: string | null;
   responsables: number[];
   responsables_noms: string[];
   responsable: number | null;
@@ -195,6 +238,7 @@ export interface Projet {
   financement_bailleurs_total: string;
   date_debut: string;
   date_fin: string;
+  date_rappel: string | null;
   statut: StatutProjet;
   type_mise_en_oeuvre: TypeMiseEnOeuvre;
   zones: number[];
@@ -479,6 +523,7 @@ export interface DashboardConsolide {
   budget_total: number;
   nombre_beneficiaires: number;
   indicateurs_par_statut: RepartitionPalier[];
+  zones_couvertes: { niveau: string; count: number }[];
   projets: { id: number; code: string; nom: string; statut: StatutProjet; budget_total: string }[];
 }
 
@@ -493,6 +538,7 @@ export interface DashboardProjet {
     palier_actuel: { libelle: string; couleur: string } | null;
   }[];
   indicateurs_par_statut: RepartitionPalier[];
+  zones_couvertes: { niveau: string; count: number }[];
 }
 
 export interface Echeance {
@@ -503,6 +549,7 @@ export interface Echeance {
   projet_nom: string;
   date_fin: string;
   en_retard: boolean;
+  est_rappel: boolean;
   lien: string;
 }
 

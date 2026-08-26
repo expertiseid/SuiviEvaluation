@@ -28,3 +28,14 @@ ROLES_VALIDATION_RAPPORT = {ROLE_ADMIN, ROLE_COORDO_GENERAL, ROLE_CHARGE_SE}
 
 # Rôles notifiés lors de la modification d'une activité déjà planifiée
 ROLES_NOTIFIEES_MODIFICATION_ACTIVITE = {ROLE_COORDO_GENERAL, ROLE_CHARGE_SE}
+
+# Niveau d'accès en écriture — indépendant du rôle (qui détermine seulement
+# la visibilité : tous les projets ou uniquement les projets affectés).
+# Un Administrateur a toujours un accès complet, quel que soit ce champ.
+NIVEAU_ACCES_LECTURE_SEULE = "LECTURE_SEULE"
+NIVEAU_ACCES_LECTURE_ECRITURE = "LECTURE_ECRITURE"
+
+NIVEAU_ACCES_CHOICES = [
+    (NIVEAU_ACCES_LECTURE_SEULE, "Lecture seule"),
+    (NIVEAU_ACCES_LECTURE_ECRITURE, "Lecture et écriture"),
+]

@@ -1,7 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
-from .constants import ROLE_CHOICES
+from .constants import NIVEAU_ACCES_CHOICES, NIVEAU_ACCES_LECTURE_ECRITURE, ROLE_CHOICES
 
 
 class User(AbstractUser):
@@ -13,6 +13,13 @@ class User(AbstractUser):
     """
 
     role = models.CharField(max_length=32, choices=ROLE_CHOICES)
+    niveau_acces = models.CharField(
+        max_length=20,
+        choices=NIVEAU_ACCES_CHOICES,
+        default=NIVEAU_ACCES_LECTURE_ECRITURE,
+        help_text="Lecture seule = consultation uniquement ; Lecture et écriture = peut créer/modifier dans "
+        "son périmètre. Un Administrateur a toujours un accès complet, indépendamment de ce champ.",
+    )
     telephone = models.CharField(max_length=30, blank=True)
     zones_affectees = models.ManyToManyField(
         "geo.Zone",

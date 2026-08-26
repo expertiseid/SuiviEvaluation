@@ -13,6 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "role",
+            "niveau_acces",
             "telephone",
             "zones_affectees",
             "is_active",
@@ -32,6 +33,7 @@ class UserWriteSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "role",
+            "niveau_acces",
             "telephone",
             "zones_affectees",
             "is_active",
@@ -41,17 +43,23 @@ class UserWriteSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
+        zones_affectees = validated_data.pop("zones_affectees", None)
         user = User(**validated_data)
         if password:
             user.set_password(password)
         user.save()
+        if zones_affectees is not None:
+            user.zones_affectees.set(zones_affectees)
         return user
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
+        zones_affectees = validated_data.pop("zones_affectees", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
             instance.set_password(password)
         instance.save()
+        if zones_affectees is not None:
+            instance.zones_affectees.set(zones_affectees)
         return instance

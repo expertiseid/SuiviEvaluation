@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
-import type { CadreStrategique, ElementStrategique, ImportStructurationResultat, Paginated, TypeNiveau } from "../types";
+import type {
+  CadreStrategique,
+  ElementStrategique,
+  ImportStructurationResultat,
+  Paginated,
+  RecapCadreStrategique,
+  TypeNiveau,
+} from "../types";
 
 export function useCadresStrategiques() {
   return useQuery({
@@ -119,6 +126,14 @@ export function useDeleteElementStrategique() {
   return useMutation({
     mutationFn: async (id: number) => apiClient.delete(`/elements-strategiques/${id}/`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["elements-strategiques"] }),
+  });
+}
+
+export function useRecapCadreStrategique(id: number | undefined) {
+  return useQuery({
+    queryKey: ["cadres-strategiques", id, "recap"],
+    queryFn: async () => (await apiClient.get<RecapCadreStrategique>(`/cadres-strategiques/${id}/recap/`)).data,
+    enabled: !!id,
   });
 }
 

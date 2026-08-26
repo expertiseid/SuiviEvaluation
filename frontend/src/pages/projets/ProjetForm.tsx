@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
-import { Alert, Button, Group, MultiSelect, NumberInput, Pill, PillGroup, Select, Stack, Tabs, Text, Textarea, TextInput } from "@mantine/core";
+import { Alert, Autocomplete, Button, Group, MultiSelect, NumberInput, Pill, PillGroup, Select, Stack, Tabs, Text, Textarea, TextInput } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
 import { modals } from "@mantine/modals";
+import { useUtilisateurs } from "../../api/accounts";
 import { useCreateProjet, useUpdateProjet } from "../../api/projects";
 import { usePartenaires, useCreatePartenaire } from "../../api/referentiels";
 import { useNiveauxAdministratifs, useZones } from "../../api/geo";
@@ -29,11 +30,13 @@ const schema = z.object({
   fonds_propres: z.number().min(0),
   date_debut: z.string().min(1, "Requis"),
   date_fin: z.string().min(1, "Requis"),
+  date_rappel: z.string().nullable().optional(),
   statut: z.enum(["EN_PREPARATION", "EN_COURS", "CLOTURE"]),
   type_mise_en_oeuvre: z.enum(["DIRECT", "CONSORTIUM"]),
   partenaire_bailleur: z.string().nullable().optional(),
   partenaire_mise_en_oeuvre: z.string().nullable().optional(),
   chef_de_projet_nom: z.string().optional(),
+  utilisateurs_affectes: z.array(z.string()).optional(),
   cadre_strategique: z.string().optional(),
   cible_totale: z.number().nullable().optional(),
   cible_hommes: z.number().nullable().optional(),
@@ -50,6 +53,7 @@ const ONGLET_PAR_CHAMP: Record<string, string> = {
   code: "general",
   date_debut: "general",
   date_fin: "general",
+  date_rappel: "general",
   cible_totale: "cibles",
   cible_hommes: "cibles",
   cible_femmes: "cibles",
@@ -66,6 +70,22 @@ export function ProjetForm({ projet, onDone }: { projet?: Projet; onDone: () => 
     [partenaires],
   );
   const { data: cadres } = useCadresStrategiques();
+  const { data: utilisateurs } = useUtilisateurs();
+  const optionsChefsDeProjet = useMemo(
+    () =>
+      (utilisateurs ?? [])
+        .map((u) => `${u.first_name} ${u.last_name}`.trim() || u.username)
+        .filter((nom, index, tous) => nom && tous.indexOf(nom) === index),
+    [utilisateurs],
+  );
+  const optionsUtilisateursAffectes = useMemo(
+    () =>
+      (utilisateurs ?? []).map((u) => ({
+        value: String(u.id),
+        label: `${(`${u.first_name} ${u.last_name}`.trim()) || u.username} (${u.username})`,
+      })),
+    [utilisateurs],
+  );
   const { data: zones } = useZones();
   const createProjet = useCreateProjet();
   const updateProjet = useUpdateProjet();
@@ -115,11 +135,13 @@ export function ProjetForm({ projet, onDone }: { projet?: Projet; onDone: () => 
           fonds_propres: Number(projet.fonds_propres),
           date_debut: projet.date_debut,
           date_fin: projet.date_fin,
+          date_rappel: projet.date_rappel,
           statut: projet.statut,
           type_mise_en_oeuvre: projet.type_mise_en_oeuvre,
           partenaire_bailleur: projet.partenaire_bailleur ? String(projet.partenaire_bailleur) : null,
           partenaire_mise_en_oeuvre: projet.partenaire_mise_en_oeuvre ? String(projet.partenaire_mise_en_oeuvre) : null,
           chef_de_projet_nom: projet.chef_de_projet_nom ?? "",
+          utilisateurs_affectes: projet.utilisateurs_affectes.map(String),
           cadre_strategique: projet.cadre_strategique ? String(projet.cadre_strategique) : "",
           cible_totale: projet.cible_totale,
           cible_hommes: projet.cible_hommes,
@@ -136,6 +158,7 @@ export function ProjetForm({ projet, onDone }: { projet?: Projet; onDone: () => 
           type_mise_en_oeuvre: "DIRECT",
           cadre_strategique: "",
           elements_capitalisation: "",
+          utilisateurs_affectes: [],
         },
   });
 
@@ -158,12 +181,14 @@ export function ProjetForm({ projet, onDone }: { projet?: Projet; onDone: () => 
       fonds_propres: values.fonds_propres,
       date_debut: values.date_debut,
       date_fin: values.date_fin,
+      date_rappel: values.date_rappel || null,
       statut: values.statut as StatutProjet,
       type_mise_en_oeuvre: values.type_mise_en_oeuvre,
       partenaire_bailleur: values.partenaire_bailleur ? Number(values.partenaire_bailleur) : null,
       partenaire_mise_en_oeuvre: values.partenaire_mise_en_oeuvre ? Number(values.partenaire_mise_en_oeuvre) : null,
       partenaires_consortium: partenairesConsortium.map((p) => p.id),
       chef_de_projet_nom: values.chef_de_projet_nom ?? "",
+      utilisateurs_affectes: (values.utilisateurs_affectes ?? []).map(Number),
       zones: zonesAjoutees.map((z) => z.id),
       cadre_strategique: values.cadre_strategique ? Number(values.cadre_strategique) : null,
       cible_totale: values.cible_totale ?? null,
@@ -269,6 +294,19 @@ export function ProjetForm({ projet, onDone }: { projet?: Projet; onDone: () => 
                 )}
               />
             </Group>
+            <Controller
+              control={control}
+              name="date_rappel"
+              render={({ field }) => (
+                <DateInput
+                  label="Date de rappel (optionnel)"
+                  description="Déclenche une alerte à cette date précise, indépendamment du seuil de jours avant l'échéance."
+                  value={field.value ?? null}
+                  onChange={field.onChange}
+                  clearable
+                />
+              )}
+            />
             <Group grow>
               <Controller
                 control={control}
@@ -295,10 +333,34 @@ export function ProjetForm({ projet, onDone }: { projet?: Projet; onDone: () => 
                 )}
               />
             </Group>
-            <TextInput
-              label="Chef de projet"
-              description="Nom libre — la personne n'a pas besoin d'avoir un compte sur la plateforme."
-              {...register("chef_de_projet_nom")}
+            <Controller
+              control={control}
+              name="chef_de_projet_nom"
+              render={({ field }) => (
+                <Autocomplete
+                  label="Chef de projet"
+                  description="Choisis un utilisateur existant dans la liste, ou tape librement un nom — la personne n'a pas besoin d'avoir un compte sur la plateforme. Ceci est juste un intitulé affiché : ça ne donne accès à rien tout seul."
+                  data={optionsChefsDeProjet}
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="utilisateurs_affectes"
+              render={({ field }) => (
+                <MultiSelect
+                  label="Utilisateurs affectés (accès à la plateforme)"
+                  description="Indispensable pour qu'un chef de projet, animateur, etc. puisse se connecter et voir ce projet — sans ça, même désigné ci-dessus, il ne verra rien après connexion."
+                  placeholder="Rechercher un utilisateur…"
+                  data={optionsUtilisateursAffectes}
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                  searchable
+                  clearable
+                />
+              )}
             />
             <Controller
               control={control}

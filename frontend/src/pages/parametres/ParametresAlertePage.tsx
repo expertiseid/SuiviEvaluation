@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { BellRing, Check, Plus, RotateCcw, Sliders, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { BellRing, CalendarClock, Check, Plus, RotateCcw, Sliders, Trash2 } from "lucide-react";
 import {
   ActionIcon,
   Badge,
   Button,
   Card,
+  Divider,
   Group,
   NumberInput,
   Select,
@@ -22,6 +24,7 @@ import {
   useParametresAlerte,
   useUpdateParametresAlerte,
 } from "../../api/indicators";
+import { useEcheances } from "../../api/dashboard";
 import { useActivitesPourProjet, useProjets } from "../../api/projects";
 import type { PorteeAlerte } from "../../types";
 
@@ -350,6 +353,42 @@ function GrilleInterpretationCard() {
   );
 }
 
+function RappelsAdateFixeListe() {
+  const { data: echeances, isLoading } = useEcheances();
+  const rappels = (echeances ?? []).filter((e) => e.est_rappel);
+
+  return (
+    <>
+      <Divider my="lg" />
+      <Group gap="xs" mb="xs">
+        <CalendarClock size={16} />
+        <Text fw={600} size="sm">Rappels à date calendaire programmés</Text>
+      </Group>
+      <Text size="sm" c="dimmed" mb="sm">
+        En plus du seuil en jours ci-dessus, chaque activité ou projet peut avoir sa propre date de rappel fixe
+        (indépendante du nombre de jours) — à définir directement dans sa fiche, champ « Date de rappel ». Voici
+        celles actuellement programmées :
+      </Text>
+      {isLoading ? (
+        <Text size="sm" c="dimmed">Chargement…</Text>
+      ) : rappels.length === 0 ? (
+        <Text size="sm" c="dimmed">Aucune date de rappel fixe n'est programmée pour le moment.</Text>
+      ) : (
+        <Stack gap={4}>
+          {rappels.map((r) => (
+            <Group key={`${r.type}-${r.id}`} justify="space-between" wrap="nowrap">
+              <Text component={Link} to={r.lien} size="sm" c="teal.8">
+                {r.libelle} <Text span c="dimmed">({r.projet_nom})</Text>
+              </Text>
+              <Badge variant="light" color="blue" size="sm">{r.date_fin}</Badge>
+            </Group>
+          ))}
+        </Stack>
+      )}
+    </>
+  );
+}
+
 function RappelsEcheanceCard() {
   const { data: parametres, isLoading } = useParametresAlerte();
   const update = useUpdateParametresAlerte();
@@ -384,7 +423,7 @@ function RappelsEcheanceCard() {
         <>
           <NumberInput
             label="Alerter avant l'échéance (jours)"
-            description="Une activité, une sous-activité ou un projet non terminé déclenche une notification (et un email) dès que son échéance tombe dans cette fenêtre — et reste alerté si l'échéance est déjà dépassée."
+            description="Seuil global par défaut : une activité, une sous-activité ou un projet non terminé déclenche une notification (et un email) dès que son échéance tombe dans cette fenêtre — et reste alerté si l'échéance est déjà dépassée."
             value={seuilEcheanceJours}
             onChange={setSeuilEcheanceJours}
             min={1}
@@ -396,6 +435,8 @@ function RappelsEcheanceCard() {
           </Group>
         </>
       )}
+
+      <RappelsAdateFixeListe />
     </Card>
   );
 }

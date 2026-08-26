@@ -8,10 +8,21 @@ standard add/change/delete/view.
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 from apps.accounts.constants import (
+    NIVEAU_ACCES_LECTURE_ECRITURE,
     ROLE_ADMIN,
     ROLES_VALIDATION_RAPPORT,
     ROLES_VISIBILITE_GLOBALE,
 )
+
+
+def peut_modifier(user) -> bool:
+    """
+    Droit d'écriture (créer/modifier/supprimer) : toujours vrai pour un
+    Administrateur, sinon dépend du niveau d'accès choisi par l'admin pour
+    cet utilisateur — indépendamment de son rôle, qui ne détermine que la
+    visibilité (tous les projets ou seulement ceux affectés).
+    """
+    return user.role == ROLE_ADMIN or user.niveau_acces == NIVEAU_ACCES_LECTURE_ECRITURE
 
 
 class IsAdmin(BasePermission):
@@ -34,39 +45,49 @@ class IsAdminOrReadOnly(BasePermission):
 
 class IsAdminOrCreateForAuthenticated(BasePermission):
     """
-    Lecture et création (POST) ouvertes à tout utilisateur authentifié — pour
-    les référentiels légers créables « à la volée » depuis un autre
-    formulaire (ex : nouvelle commune, nouveau bailleur saisi en tapant son
-    nom) — modification et suppression réservées à l'Administrateur.
+    Lecture ouverte à tout utilisateur authentifié ; création (POST) ouverte
+    à tout utilisateur ayant le droit d'écriture (niveau d'accès) — pour les
+    référentiels légers créables « à la volée » depuis un autre formulaire
+    (ex : nouvelle commune, nouveau bailleur saisi en tapant son nom) —
+    modification et suppression réservées à l'Administrateur.
     """
 
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-        if request.method in (*SAFE_METHODS, "POST"):
+        if request.method in SAFE_METHODS:
             return True
+        if request.method == "POST":
+            return peut_modifier(request.user)
         return request.user.role == ROLE_ADMIN
 
 
 class HasGlobalVisibilityOrAssigned(BasePermission):
     """
-    Autorise l'accès en lecture à tout utilisateur authentifié ; le filtrage
-    fin par affectation (zones/projets) se fait dans get_queryset() de
-    chaque viewset via has_global_visibility(request.user), pas ici.
+    Lecture ouverte à tout utilisateur authentifié ; écriture (create/
+    update/delete) réservée à ceux ayant le droit d'écriture (niveau
+    d'accès, cf. peut_modifier). Le filtrage fin par affectation
+    (zones/projets) se fait séparément dans get_queryset() de chaque
+    viewset via has_global_visibility(request.user).
     """
 
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated)
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return peut_modifier(request.user)
 
 
 class CanValidateReport(BasePermission):
-    """Rôles habilités à faire passer un rapport de SOUMIS à VALIDE."""
+    """Rôles habilités à faire passer un rapport de SOUMIS à VALIDE (et ayant le droit d'écriture)."""
 
     def has_permission(self, request, view):
         return bool(
             request.user
             and request.user.is_authenticated
             and request.user.role in ROLES_VALIDATION_RAPPORT
+            and peut_modifier(request.user)
         )
 
 

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
@@ -6,7 +8,11 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
-from apps.core.permissions import IsAdminOrReadOnly
+from apps.core.permissions import IsAdminOrReadOnly, has_global_visibility
+from apps.indicators.services import indicateurs_pour_projet, valeur_realisee_totale
+from apps.projects.models import Activite, Projet
+from apps.projects.queryset_filters import visible_projets_ids
+from apps.reports.services import taux_execution_financiere_global, taux_execution_physique_global
 
 from .models import CadreStrategique, ElementStrategique, TypeNiveau
 from .serializers import CadreStrategiqueSerializer, ElementStrategiqueSerializer, TypeNiveauSerializer
@@ -19,9 +25,21 @@ from .services import (
 
 
 class CadreStrategiqueViewSet(viewsets.ModelViewSet):
-    queryset = CadreStrategique.objects.all()
     serializer_class = CadreStrategiqueSerializer
     permission_classes = (IsAdminOrReadOnly,)
+
+    def get_queryset(self):
+        """
+        Un rôle à visibilité globale voit tous les cadres stratégiques ; un
+        rôle restreint (chef de projet, animateur de terrain) ne voit que
+        ceux rattachés à un projet auquel il est affecté — cohérent avec la
+        restriction déjà appliquée sur les projets eux-mêmes.
+        """
+        if has_global_visibility(self.request.user):
+            return CadreStrategique.objects.all()
+        return CadreStrategique.objects.filter(
+            projets__id__in=visible_projets_ids(self.request.user)
+        ).distinct()
 
     def perform_destroy(self, instance):
         supprimer_cadre_strategique_cascade(instance)
@@ -35,6 +53,86 @@ class CadreStrategiqueViewSet(viewsets.ModelViewSet):
         )
         response["Content-Disposition"] = f"attachment; filename=plan_strategique_{cadre.id}.xlsx"
         return response
+
+    @action(detail=True, methods=["get"], url_path="recap")
+    def recap(self, request, pk=None):
+        """
+        Récapitulatif des projets rattachés à ce cadre stratégique (via
+        Projet.cadre_strategique) et de leur contribution financière — limité
+        aux projets visibles par l'utilisateur (un chef de projet non
+        affecté à un projet donné ne doit pas en voir le budget ici non plus).
+        """
+        cadre = self.get_object()
+        ids = visible_projets_ids(request.user)
+        projets = Projet.objects.filter(cadre_strategique=cadre, id__in=ids)
+
+        lignes = []
+        for projet in projets:
+            activites = Activite.objects.filter(
+                objectif_specifique__objectif_general__projet=projet
+            ).order_by("code_activite", "libelle")
+            indicateurs = indicateurs_pour_projet(projet.id).order_by("libelle")
+            budget_activites_alloue_total = sum((a.budget_alloue or 0 for a in activites), Decimal("0"))
+            budget_activites_realise_total = sum((a.budget_realise or 0 for a in activites), Decimal("0"))
+            lignes.append(
+                {
+                    "id": projet.id,
+                    "code": projet.code,
+                    "nom": projet.nom,
+                    "statut": projet.statut,
+                    "date_debut": projet.date_debut,
+                    "date_fin": projet.date_fin,
+                    "chef_de_projet_nom": projet.chef_de_projet_nom,
+                    "bailleur_nom": projet.partenaire_bailleur.nom if projet.partenaire_bailleur else None,
+                    "budget_total": projet.budget_total,
+                    "budget_activites_alloue_total": budget_activites_alloue_total,
+                    "budget_activites_realise_total": budget_activites_realise_total,
+                    "financement_bailleurs_total": projet.financement_bailleurs_total,
+                    "taux_execution_physique": taux_execution_physique_global(projet),
+                    "taux_execution_financiere": taux_execution_financiere_global(projet),
+                    "nombre_activites": activites.count(),
+                    "nombre_indicateurs": indicateurs.count(),
+                    "activites": [
+                        {
+                            "id": a.id,
+                            "code": a.code_activite,
+                            "libelle": a.libelle,
+                            "statut": a.statut,
+                            "taux_realisation": a.taux_realisation,
+                            "quantite_realisee": a.quantite_realisee,
+                            "quantite_prevue": a.quantite_prevue,
+                            "unite_quantite": a.unite_quantite,
+                            "budget_alloue": a.budget_alloue,
+                            "budget_realise": a.budget_realise,
+                        }
+                        for a in activites
+                    ],
+                    "indicateurs": [
+                        {
+                            "id": i.id,
+                            "libelle": i.libelle,
+                            "valeur_realisee": valeur_realisee_totale(i),
+                            "valeur_cible": i.valeur_cible,
+                            "unite": i.unite,
+                        }
+                        for i in indicateurs
+                    ],
+                }
+            )
+
+        taux_physiques = [p["taux_execution_physique"] for p in lignes if p["taux_execution_physique"] is not None]
+        taux_financiers = [p["taux_execution_financiere"] for p in lignes if p["taux_execution_financiere"] is not None]
+
+        return Response(
+            {
+                "budget_total": sum((p["budget_total"] for p in lignes), start=0),
+                "nombre_activites_total": sum(p["nombre_activites"] for p in lignes),
+                "nombre_indicateurs_total": sum(p["nombre_indicateurs"] for p in lignes),
+                "taux_execution_physique_moyen": round(sum(taux_physiques) / len(taux_physiques), 1) if taux_physiques else None,
+                "taux_execution_financiere_moyen": round(sum(taux_financiers) / len(taux_financiers), 1) if taux_financiers else None,
+                "projets": lignes,
+            }
+        )
 
 
 class TypeNiveauViewSet(viewsets.ModelViewSet):

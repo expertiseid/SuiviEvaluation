@@ -66,6 +66,7 @@ export function ActiviteForm({
   const [uniteQuantite, setUniteQuantite] = useState(activite?.unite_quantite ?? "");
   const [dateDebut, setDateDebut] = useState<string | null>(activite?.date_debut ?? null);
   const [dateFin, setDateFin] = useState<string | null>(activite?.date_fin ?? null);
+  const [dateRappel, setDateRappel] = useState<string | null>(activite?.date_rappel ?? null);
 
   const budgetRestant = budgetProjetTotal - budgetDejaAlloue;
   const budgetAllouNumber = budgetAlloue === "" ? 0 : Number(budgetAlloue);
@@ -121,6 +122,7 @@ export function ActiviteForm({
       unite_quantite: uniteQuantite,
       date_debut: dateDebut,
       date_fin: dateFin,
+      date_rappel: dateRappel,
     };
     try {
       if (enEdition) {
@@ -162,6 +164,13 @@ export function ActiviteForm({
         <DateInput label="Date de début prévue" value={dateDebut} onChange={setDateDebut} />
         <DateInput label="Date de fin prévue" value={dateFin} onChange={setDateFin} />
       </Group>
+      <DateInput
+        label="Date de rappel (optionnel)"
+        description="Déclenche une alerte à cette date précise, indépendamment du seuil de jours avant l'échéance."
+        value={dateRappel}
+        onChange={setDateRappel}
+        clearable
+      />
       <NumberInput
         label="Budget alloué (FCFA)"
         description={`Budget restant du projet : ${budgetRestant.toLocaleString("fr-FR")} FCFA`}

@@ -81,6 +81,11 @@ def generer_modele_import_complet() -> bytes:
     ])
     instructions.append(["- Seule la feuille « Projet » est obligatoire (Nom, Code, dates de début/fin)."])
     instructions.append([
+        "- « Utilisateurs affectés » (feuille Projet) : identifiants (username) de comptes déjà créés sur la "
+        "plateforme, séparés par « ; ». C'est ce qui donne réellement accès au projet une fois connecté — le "
+        "champ « Chef de projet » n'est qu'un intitulé affiché, il ne donne aucun accès à lui seul."
+    ])
+    instructions.append([
         "- Feuille « Cadre stratégique » : laisse la ligne « Nom du cadre stratégique » vide si tu ne veux "
         "pas en créer un — le projet sera alors créé sans cadre stratégique."
     ])

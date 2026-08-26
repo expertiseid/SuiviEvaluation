@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Check, Download, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { Check, Download, MapPin, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import {
   ActionIcon,
   Badge,
@@ -238,10 +238,26 @@ export function ProjetDetailPage() {
           <Title order={2}>{projet.nom}</Title>
           <Text c="dimmed">
             {projet.code} · {projet.statut}
-            {projet.cadre_strategique_nom && ` · ${projet.cadre_strategique_nom}`}
             {projet.pays.length > 0 &&
               ` · ${projet.pays.map((code) => PAYS_MONDE.find((p) => p.code === code)?.nom ?? code).join(", ")}`}
+            {projet.cadre_strategique_nom && projet.cadre_strategique && (
+              <>
+                {" · "}
+                <Text component={Link} to={`/strategie/${projet.cadre_strategique}`} span c="teal.8" fw={500}>
+                  {projet.cadre_strategique_nom}
+                </Text>
+              </>
+            )}
           </Text>
+          {dashboard && dashboard.zones_couvertes.length > 0 && (
+            <Group gap={6} mt={4}>
+              {dashboard.zones_couvertes.map((z) => (
+                <Badge key={z.niveau} variant="light" color="cyan" leftSection={<MapPin size={12} />}>
+                  {z.count} {z.niveau}{z.count > 1 ? "s" : ""}
+                </Badge>
+              ))}
+            </Group>
+          )}
         </div>
         <Group gap="lg">
           {dashboard && dashboard.indicateurs_par_statut.length > 0 && (
@@ -262,10 +278,6 @@ export function ProjetDetailPage() {
               <Menu.Label>Pour la collecte terrain</Menu.Label>
               <Menu.Item onClick={() => telechargerExportProjet(projetId, "xlsform")}>
                 XLSForm (KoboToolbox/ODK)
-              </Menu.Item>
-              <Menu.Label>Pour l'analyse statistique</Menu.Label>
-              <Menu.Item onClick={() => telechargerExportProjet(projetId, "spss")}>
-                Données SPSS (.sav)
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>

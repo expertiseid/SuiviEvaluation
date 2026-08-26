@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Download, FileSpreadsheet, ListTree, Pencil, Plus, Search, Settings2, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Download, FileSpreadsheet, Gauge, ListTree, Pencil, Plus, Search, Settings2, Trash2, Wallet } from "lucide-react";
 import {
   ActionIcon,
   Badge,
@@ -10,9 +10,12 @@ import {
   Collapse,
   Group,
   Modal,
+  Progress,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
+  Table,
   Tabs,
   Text,
   Textarea,
@@ -28,6 +31,7 @@ import {
   useDeleteElementStrategique,
   useDeleteTypeNiveau,
   useElementsStrategiques,
+  useRecapCadreStrategique,
   useTypesNiveaux,
   useUpdateElementStrategique,
   useUpdateTypeNiveau,
@@ -35,10 +39,13 @@ import {
 } from "../../api/strategy";
 import { BoutonModeEdition } from "../../components/common/BoutonModeEdition";
 import { EmptyState } from "../../components/common/EmptyState";
+import { StatCard } from "../../components/common/StatCard";
+import { STATUS_HEX } from "../../components/common/statusPalette";
 import { confirmerSuppression } from "../../components/common/confirmerSuppression";
+import { toneDeTaux } from "../../components/suivi/BarreProgression";
 import { correspond } from "../../utils/recherche";
 import { ImportStructurationModal } from "./ImportStructurationModal";
-import type { ElementStrategique, TypeNiveau } from "../../types";
+import type { ElementStrategique, RecapCadreStrategique, TypeNiveau } from "../../types";
 
 // Une couleur par rang de niveau (pas par nom) — fixe et cohérente sur tout
 // l'écran, pour distinguer visuellement "à quel niveau appartient ce nœud"
@@ -56,6 +63,10 @@ function useCouleursParNiveau(niveaux: TypeNiveau[]) {
 
 function messageErreurSuppression(defaut: string) {
   return `${defaut} — vérifie qu'aucun élément n'en dépend encore.`;
+}
+
+function formatNombre(valeur: string | number): string {
+  return Number(valeur).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 }
 
 // ================== Onglet 1 : Configuration des niveaux ==================
@@ -666,6 +677,204 @@ function Arborescence({
   );
 }
 
+// ================== Onglet 3 : Récapitulatif projets & budgets ==================
+
+function TauxCell({ taux }: { taux: number | null }) {
+  if (taux === null) return <Text size="sm" c="dimmed" ta="right">—</Text>;
+  return (
+    <Group gap={6} wrap="nowrap" justify="flex-end">
+      <Text size="sm" fw={600}>{taux}%</Text>
+      <Progress value={Math.min(100, taux)} color={STATUS_HEX[toneDeTaux(taux)]} size={6} w={54} radius="xl" />
+    </Group>
+  );
+}
+
+function TableauActivites({
+  activites,
+  budgetProjet,
+}: {
+  activites: RecapCadreStrategique["projets"][number]["activites"];
+  budgetProjet: number;
+}) {
+  if (activites.length === 0) return <Text size="sm" c="dimmed">Aucune activité.</Text>;
+
+  const totalRealise = activites.reduce((s, a) => s + Number(a.budget_realise ?? 0), 0);
+
+  return (
+    <>
+      <Table.ScrollContainer minWidth={520}>
+        <Table verticalSpacing={4} fz="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th tt="uppercase" fz="xs" c="dimmed">Activité</Table.Th>
+              <Table.Th tt="uppercase" fz="xs" c="dimmed" ta="right">Quantité</Table.Th>
+              <Table.Th tt="uppercase" fz="xs" c="dimmed" ta="right">Budget dépensé sur alloué</Table.Th>
+              <Table.Th tt="uppercase" fz="xs" c="dimmed" ta="right">Taux</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {activites.map((a) => (
+              <Table.Tr key={a.id}>
+                <Table.Td>
+                  {a.code && <Text span c="dimmed">{a.code} — </Text>}
+                  {a.libelle}
+                </Table.Td>
+                <Table.Td ta="right" style={{ whiteSpace: "nowrap" }}>
+                  {a.quantite_prevue !== null
+                    ? `${formatNombre(a.quantite_realisee ?? 0)} sur ${formatNombre(a.quantite_prevue)}${a.unite_quantite ? ` ${a.unite_quantite}` : ""}`
+                    : "—"}
+                </Table.Td>
+                <Table.Td ta="right" style={{ whiteSpace: "nowrap" }}>
+                  {a.budget_alloue !== null
+                    ? `${formatNombre(a.budget_realise ?? 0)} sur ${formatNombre(a.budget_alloue)} FCFA`
+                    : "—"}
+                </Table.Td>
+                <Table.Td ta="right">{a.taux_realisation !== null ? `${a.taux_realisation}%` : "—"}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+          <Table.Tfoot>
+            <Table.Tr>
+              <Table.Th>Total</Table.Th>
+              <Table.Th />
+              <Table.Th ta="right" style={{ whiteSpace: "nowrap" }}>
+                {formatNombre(totalRealise)} sur {formatNombre(budgetProjet)} FCFA
+              </Table.Th>
+              <Table.Th />
+            </Table.Tr>
+          </Table.Tfoot>
+        </Table>
+      </Table.ScrollContainer>
+    </>
+  );
+}
+
+function TableauIndicateurs({ indicateurs }: { indicateurs: RecapCadreStrategique["projets"][number]["indicateurs"] }) {
+  if (indicateurs.length === 0) return <Text size="sm" c="dimmed">Aucun indicateur.</Text>;
+
+  return (
+    <Table.ScrollContainer minWidth={420}>
+      <Table verticalSpacing={4} fz="sm">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th tt="uppercase" fz="xs" c="dimmed">Indicateur</Table.Th>
+            <Table.Th tt="uppercase" fz="xs" c="dimmed" ta="right">Valeur réalisée sur cible</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {indicateurs.map((i) => (
+            <Table.Tr key={i.id}>
+              <Table.Td>{i.libelle}</Table.Td>
+              <Table.Td ta="right" style={{ whiteSpace: "nowrap" }}>
+                {formatNombre(i.valeur_realisee)} sur {formatNombre(i.valeur_cible)}
+                {i.unite ? ` ${i.unite}` : ""}
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
+  );
+}
+
+function CarteProjetRecap({ p }: { p: RecapCadreStrategique["projets"][number] }) {
+  return (
+    <Card withBorder padding="md" radius="md">
+      <Group justify="space-between" align="flex-start" mb="xs" wrap="wrap">
+        <div>
+          <Group gap={8}>
+            <Text size="sm" c="dimmed" fw={500}>{p.code}</Text>
+            <Text component={Link} to={`/projets/${p.id}`} fw={700} c="teal.8">{p.nom}</Text>
+            <Badge variant="light" size="sm">{p.statut}</Badge>
+          </Group>
+          <Text size="xs" c="dimmed" mt={2}>
+            {p.chef_de_projet_nom || "Chef de projet non renseigné"} · {p.bailleur_nom || "Bailleur non renseigné"} ·{" "}
+            {p.date_debut} → {p.date_fin}
+          </Text>
+        </div>
+        <Group gap="lg">
+          <div>
+            <Text size="xs" c="dimmed" ta="right">Taux physique</Text>
+            <TauxCell taux={p.taux_execution_physique} />
+          </div>
+          <div>
+            <Text size="xs" c="dimmed" ta="right">Taux financier</Text>
+            <TauxCell taux={p.taux_execution_financiere} />
+          </div>
+          <div>
+            <Text size="xs" c="dimmed" ta="right">Budget total</Text>
+            <Text fw={700} ta="right">{Number(p.budget_total).toLocaleString("fr-FR")} FCFA</Text>
+          </div>
+        </Group>
+      </Group>
+
+      <Stack gap="md" mt="sm">
+        <Box>
+          <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb={4}>Activités ({p.nombre_activites})</Text>
+          <TableauActivites activites={p.activites} budgetProjet={Number(p.budget_total)} />
+        </Box>
+        <Box>
+          <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb={4}>Indicateurs ({p.nombre_indicateurs})</Text>
+          <TableauIndicateurs indicateurs={p.indicateurs} />
+        </Box>
+      </Stack>
+    </Card>
+  );
+}
+
+function RecapProjetsBudgets({ cadreId }: { cadreId: number }) {
+  const { data: recap, isLoading } = useRecapCadreStrategique(cadreId);
+
+  if (isLoading || !recap) return <Text c="dimmed">Chargement…</Text>;
+
+  return (
+    <Stack gap="md">
+      <SimpleGrid cols={{ base: 1, xs: 3, md: 5 }} spacing="md">
+        <StatCard
+          label="Budget total contribuant"
+          value={`${recap.budget_total.toLocaleString("fr-FR")} FCFA`}
+          icon={<Wallet size={20} />}
+          color="indigo"
+        />
+        <StatCard label="Activités" value={recap.nombre_activites_total} icon={<ListTree size={20} />} color="teal" />
+        <StatCard
+          label="Indicateurs"
+          value={recap.nombre_indicateurs_total}
+          icon={<Settings2 size={20} />}
+          color="orange"
+        />
+        <StatCard
+          label="Taux physique moyen"
+          value={recap.taux_execution_physique_moyen !== null ? `${recap.taux_execution_physique_moyen}%` : "—"}
+          icon={<Gauge size={20} />}
+          color="grape"
+        />
+        <StatCard
+          label="Taux financier moyen"
+          value={recap.taux_execution_financiere_moyen !== null ? `${recap.taux_execution_financiere_moyen}%` : "—"}
+          icon={<Gauge size={20} />}
+          color="cyan"
+        />
+      </SimpleGrid>
+
+      <div>
+        <Title order={4} mb="xs">Projets contribuant à ce cadre stratégique</Title>
+        {recap.projets.length === 0 ? (
+          <Card withBorder padding="md" radius="md">
+            <EmptyState icon={<Wallet size={32} strokeWidth={1.5} />} message="Aucun projet rattaché à ce cadre stratégique." />
+          </Card>
+        ) : (
+          <Stack gap="md">
+            {recap.projets.map((p) => (
+              <CarteProjetRecap key={p.id} p={p} />
+            ))}
+          </Stack>
+        )}
+      </div>
+    </Stack>
+  );
+}
+
 // ================== Page ==================
 
 export function CadreStrategiqueDetailPage() {
@@ -712,6 +921,9 @@ export function CadreStrategiqueDetailPage() {
             <Tabs.Tab value="arborescence" leftSection={<ListTree size={15} />}>
               Arborescence &amp; saisie
             </Tabs.Tab>
+            <Tabs.Tab value="recap" leftSection={<Wallet size={15} />}>
+              Projets &amp; budgets
+            </Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="configuration" pt="md">
@@ -720,6 +932,10 @@ export function CadreStrategiqueDetailPage() {
 
           <Tabs.Panel value="arborescence" pt="md">
             <Arborescence niveaux={niveaux ?? []} elements={elements ?? []} editionActive={editionActive} />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="recap" pt="md">
+            <RecapProjetsBudgets cadreId={cadreId} />
           </Tabs.Panel>
         </Tabs>
       )}

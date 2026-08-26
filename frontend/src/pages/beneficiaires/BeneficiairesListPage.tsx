@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Upload } from "lucide-react";
-import { Button, Group, Modal, Stack, Table, TextInput, Title } from "@mantine/core";
+import { Button, Group, Modal, Stack, Table, Text, TextInput, Title } from "@mantine/core";
 import { useBeneficiaires } from "../../api/beneficiaries";
 import { BeneficiaireForm } from "./BeneficiaireForm";
 import { ImportBeneficiairesModal } from "./ImportBeneficiairesModal";
@@ -46,7 +47,11 @@ export function BeneficiairesListPage() {
           <Table.Tbody>
             {beneficiaires?.map((b) => (
               <Table.Tr key={b.id}>
-                <Table.Td>{b.nom} {b.prenom}</Table.Td>
+                <Table.Td>
+                  <Text component={Link} to={`/beneficiaires/${b.id}`} size="sm" fw={500} c="teal.8">
+                    {b.nom} {b.prenom}
+                  </Text>
+                </Table.Td>
                 <Table.Td>{b.sexe}</Table.Td>
                 <Table.Td>{b.telephone}</Table.Td>
                 <Table.Td>{b.zone_nom ?? "—"}</Table.Td>

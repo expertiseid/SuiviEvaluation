@@ -1,11 +1,11 @@
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, BellRing } from "lucide-react";
 import { Group, Text, UnstyledButton } from "@mantine/core";
 import { useEcheances } from "../../api/dashboard";
 import type { Echeance } from "../../types";
 
 function texteEcheance(echeance: Echeance): string {
-  const prefixe = echeance.en_retard ? "En retard" : "Échéance proche";
+  const prefixe = echeance.est_rappel ? "Rappel" : echeance.en_retard ? "En retard" : "Échéance proche";
   return `${prefixe} · ${echeance.libelle} (${echeance.projet_nom}) — ${echeance.date_fin}`;
 }
 
@@ -53,7 +53,11 @@ export function EcheancesBanner() {
             onClick={() => navigate(echeance.lien)}
             style={{ display: "flex", alignItems: "center", gap: 6 }}
           >
-            <AlertTriangle size={13} color={echeance.en_retard ? "white" : "var(--mantine-color-yellow-3)"} />
+            {echeance.est_rappel ? (
+              <BellRing size={13} color="var(--mantine-color-blue-2)" />
+            ) : (
+              <AlertTriangle size={13} color={echeance.en_retard ? "white" : "var(--mantine-color-yellow-3)"} />
+            )}
             <Text size="xs" c="white" fw={500}>
               {texteEcheance(echeance)}
             </Text>

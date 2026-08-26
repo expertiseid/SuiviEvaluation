@@ -26,6 +26,7 @@ CHAMPS_PROJET = [
     ("Partenaire de mise en œuvre", "ONG Sahel Solidarité"),
     ("Partenaires du consortium (séparés par ;)", ""),
     ("Chef de projet", "OUEDRAOGO Fatimata"),
+    ("Utilisateurs affectés — identifiants séparés par ; (accès plateforme)", ""),
     ("Cible totale", 1000),
     ("Cible hommes", 400),
     ("Cible femmes", 600),
@@ -103,6 +104,12 @@ def generer_modele_import_projet() -> bytes:
     instructions.append(["- Feuille « Projet » : une ligne = un champ (colonne A = nom du champ, colonne B = valeur)."])
     instructions.append(["- Nom du projet, Code du projet, Date de début et Date de fin sont obligatoires."])
     instructions.append(["- Le code du projet doit être unique — l'import est refusé s'il existe déjà."])
+    instructions.append([
+        "- « Utilisateurs affectés » : identifiants (username) de comptes déjà créés sur la plateforme, séparés "
+        "par « ; ». C'est ce qui donne réellement accès au projet une fois connecté — le champ « Chef de "
+        "projet » n'est qu'un intitulé affiché, il ne donne aucun accès à lui seul. Un identifiant inconnu "
+        "est ignoré avec un avertissement, sans bloquer le reste de l'import."
+    ])
     instructions.append([
         "- Feuille « Planification » : une colonne = un niveau (Objectif général → Objectif spécifique → "
         "Activité → Sous-activité). Sur chaque ligne, remplis UNE SEULE de ces 4 colonnes : son rattachement "
@@ -370,9 +377,13 @@ def importer_projet(fichier, cadre_strategique_impose=None) -> dict:
 
 
 def importer_projet_depuis_wb(wb, cadre_strategique_impose=None) -> dict:
+    from django.contrib.auth import get_user_model
+
     from apps.strategy.models import CadreStrategique
 
     from .models import Projet
+
+    User = get_user_model()
 
     if "Projet" not in wb.sheetnames:
         return {"projet_id": None, "erreurs": [{"ligne": 0, "message": "Feuille « Projet » introuvable."}], "avertissements": []}
@@ -424,6 +435,21 @@ def importer_projet_depuis_wb(wb, cadre_strategique_impose=None) -> dict:
     noms_consortium = [c.strip() for c in _texte(champs, "Partenaires du consortium (séparés par ;)").split(";") if c.strip()]
     partenaires_consortium = [p for p in (_resoudre_partenaire(n, "MISE_EN_OEUVRE") for n in noms_consortium) if p]
 
+    identifiants_affectes = [
+        i.strip()
+        for i in _texte(champs, "Utilisateurs affectés — identifiants séparés par ; (accès plateforme)").split(";")
+        if i.strip()
+    ]
+    utilisateurs_affectes = []
+    for identifiant in identifiants_affectes:
+        utilisateur = User.objects.filter(username__iexact=identifiant).first()
+        if utilisateur:
+            utilisateurs_affectes.append(utilisateur)
+        else:
+            avertissements.append(
+                {"ligne": 0, "message": f"Utilisateur « {identifiant} » introuvable — non affecté au projet."}
+            )
+
     projet = Projet.objects.create(
         nom=nom,
         code=code,
@@ -446,6 +472,8 @@ def importer_projet_depuis_wb(wb, cadre_strategique_impose=None) -> dict:
     )
     if partenaires_consortium:
         projet.partenaires_consortium.set(partenaires_consortium)
+    if utilisateurs_affectes:
+        projet.utilisateurs_affectes.set(utilisateurs_affectes)
 
     resultat_plan = {
         "objectifs_generaux": 0,

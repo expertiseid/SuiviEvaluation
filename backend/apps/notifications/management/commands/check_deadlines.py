@@ -30,7 +30,9 @@ class Command(BaseCommand):
         total = 0
         for echeance in lister_echeances(tous_projets_ids):
             type_libelle = LIBELLE_TYPE[echeance["type"]]
-            if echeance["type"] == "PROJET":
+            if echeance["est_rappel"]:
+                titre = f"Rappel programmé : {echeance['libelle']}"
+            elif echeance["type"] == "PROJET":
                 titre = (
                     f"Projet arrivé à échéance : {echeance['libelle']}"
                     if echeance["en_retard"]

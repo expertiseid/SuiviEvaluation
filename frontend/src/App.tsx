@@ -10,6 +10,7 @@ import { IndicateurDetailPage } from "./pages/indicateurs/IndicateurDetailPage";
 import { SuiviPage } from "./pages/suivi/SuiviPage";
 import { SuiviProjetDashboard } from "./pages/suivi/SuiviProjetDashboard";
 import { BeneficiairesListPage } from "./pages/beneficiaires/BeneficiairesListPage";
+import { BeneficiaireDetailPage } from "./pages/beneficiaires/BeneficiaireDetailPage";
 import { DoublonsPage } from "./pages/beneficiaires/DoublonsPage";
 import { RapportsListPage } from "./pages/rapports/RapportsListPage";
 import { UtilisateursPage } from "./pages/utilisateurs/UtilisateursPage";
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/suivi" element={<SuiviPage />} />
         <Route path="/suivi/:id" element={<SuiviProjetDashboard />} />
         <Route path="/beneficiaires" element={<BeneficiairesListPage />} />
+        <Route path="/beneficiaires/:id" element={<BeneficiaireDetailPage />} />
         <Route path="/doublons" element={<DoublonsPage />} />
         <Route path="/rapports" element={<RapportsListPage />} />
         <Route path="/strategie" element={<CadresStrategiquesListPage />} />

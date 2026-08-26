@@ -17,3 +17,12 @@ export function useCreateUtilisateur() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["utilisateurs"] }),
   });
 }
+
+export function useUpdateUtilisateur() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: Partial<User> & { password?: string } }) =>
+      (await apiClient.patch<User>(`/utilisateurs/${id}/`, payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["utilisateurs"] }),
+  });
+}

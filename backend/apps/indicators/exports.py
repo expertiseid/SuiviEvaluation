@@ -1,10 +1,9 @@
 """
-Exports avancés pour interopérabilité avec les outils de collecte (XLSForm,
-pour KoboToolbox/ODK Collect) et d'analyse statistique (SPSS .sav).
+Export avancé pour interopérabilité avec les outils de collecte (XLSForm,
+pour KoboToolbox/ODK Collect).
 """
 import io
 import re
-import tempfile
 
 from openpyxl import Workbook
 
@@ -49,49 +48,3 @@ def generer_xlsform(projet) -> bytes:
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
-
-
-def generer_spss(projet) -> bytes:
-    """
-    Exporte les valeurs d'indicateurs du projet en fichier SPSS .sav, pour
-    analyse statistique externe — répond à l'exigence d'export ouvert et
-    interopérable (pas de format propriétaire fermé).
-    """
-    import pandas as pd
-    import pyreadstat
-
-    indicateurs = indicateurs_pour_projet(projet.id)
-    lignes = []
-    for indicateur in indicateurs:
-        for valeur in indicateur.valeurs.all():
-            lignes.append(
-                {
-                    "indicateur": indicateur.libelle[:80],
-                    "unite": indicateur.unite,
-                    "periode_debut": str(valeur.periode_debut),
-                    "periode_fin": str(valeur.periode_fin),
-                    "valeur_realisee": float(valeur.valeur_realisee),
-                    "valeur_cible": float(indicateur.valeur_cible),
-                    "saisi_par": str(valeur.saisi_par),
-                }
-            )
-
-    if not lignes:
-        lignes = [
-            {
-                "indicateur": "",
-                "unite": "",
-                "periode_debut": "",
-                "periode_fin": "",
-                "valeur_realisee": None,
-                "valeur_cible": None,
-                "saisi_par": "",
-            }
-        ]
-
-    df = pd.DataFrame(lignes)
-
-    with tempfile.NamedTemporaryFile(suffix=".sav") as tmp:
-        pyreadstat.write_sav(df, tmp.name, file_label=projet.nom[:80])
-        tmp.seek(0)
-        return tmp.read()

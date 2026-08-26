@@ -61,6 +61,12 @@ class Projet(TimestampedModel):
     fonds_propres = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     date_debut = models.DateField()
     date_fin = models.DateField()
+    date_rappel = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date fixe à laquelle une alerte de rappel est déclenchée pour ce projet, indépendamment "
+        "du seuil de jours avant l'échéance (ex : pour un rapport bailleur à une date précise).",
+    )
     statut = models.CharField(max_length=20, choices=Statut.choices, default=Statut.EN_PREPARATION)
     type_mise_en_oeuvre = models.CharField(
         max_length=20, choices=TypeMiseEnOeuvre.choices, default=TypeMiseEnOeuvre.DIRECT
@@ -196,6 +202,12 @@ class Activite(TimestampedModel):
     date_debut_reelle = models.DateField(null=True, blank=True)
     date_fin_reelle = models.DateField(null=True, blank=True)
     nb_jours_planifies = models.PositiveIntegerField(null=True, blank=True)
+    date_rappel = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date fixe à laquelle une alerte de rappel est déclenchée pour cette activité, indépendamment "
+        "du seuil de jours avant l'échéance.",
+    )
 
     responsables = models.ManyToManyField(
         "intervenants.Intervenant",

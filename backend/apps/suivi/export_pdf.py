@@ -36,6 +36,17 @@ def _fmt_date(d):
     return d.strftime("%d/%m/%Y") if d else "—"
 
 
+def _barre_progression(taux, couleur="#1c7ed6"):
+    """Barre de progression HTML/CSS simple — largeur = taux (%), plafonnée à 100 pour l'affichage
+    (un dépassement de cible reste visible dans le texte à côté, pas dans la barre)."""
+    pct = max(0, min(100, taux)) if taux is not None else 0
+    return (
+        '<div style="background:#e9ecef;border-radius:4px;height:7px;width:100%;'
+        f'margin:4px 0;overflow:hidden;"><div style="background:{couleur};height:100%;'
+        f'width:{pct}%;"></div></div>'
+    )
+
+
 def _badge(texte, couleur):
     return (
         f'<span style="display:inline-block;padding:2px 10px;border-radius:10px;'
@@ -118,6 +129,7 @@ def _bloc_indicateur(indicateur, aujourdhui):
         ({indicateur['taux_actuel']}%) — Référence : {_fmt(depart)} {escape(indicateur['unite'])}
         {f"<br/>{attendu_txt}" if attendu_txt else ""}
       </div>
+      {_barre_progression(indicateur['taux_actuel'], palier['couleur'] if palier else '#1c7ed6')}
       {_table_historique(["Période", "Cette période", "Cumul", "Attendu"], lignes)}
     </div>
     """
@@ -162,7 +174,7 @@ def _bloc_sous_activite(sa, aujourdhui):
         <span style="font-size:9px;color:#666;">{escape(STATUT_SOUS_ACTIVITE_LABEL.get(sa['statut'], sa['statut']))}</span>
       </div>
       <div style="font-size:10px;color:#666;">{planifie}</div>
-      {f'<div style="font-size:10px;margin-top:2px;">Réalisé : <strong>{_fmt(realise)} / {_fmt(cible)} {escape(sa["unite_quantite"])}</strong> ({_fmt_pct(taux)})' + (f" — Attendu aujourd'hui : {_fmt(attendu, 0)} {escape(sa['unite_quantite'])}" if attendu is not None else "") + '</div>' if cible is not None else ""}
+      {f'<div style="font-size:10px;margin-top:2px;">Réalisé : <strong>{_fmt(realise)} / {_fmt(cible)} {escape(sa["unite_quantite"])}</strong> ({_fmt_pct(taux)})' + (f" — Attendu aujourd'hui : {_fmt(attendu, 0)} {escape(sa['unite_quantite'])}" if attendu is not None else "") + '</div>' + _barre_progression(taux, '#1c7ed6') if cible is not None else ""}
       {_table_historique(["Période", "Cette période", "Cumul", "Attendu", "Statut"], lignes)}
     </div>
     """
@@ -180,6 +192,9 @@ def _bloc_activite(activite, aujourdhui):
     attendu_fin = valeur_attendue_a(aujourdhui, debut, fin, 0, budget) if debut and fin and budget else None
     planifie = f"Planifié : {_fmt_date(debut)} → {_fmt_date(fin)}" if debut and fin else "Non planifié"
 
+    palier_activite = activite.get("palier_actuel")
+    couleur_activite = palier_activite["couleur"] if palier_activite else "#1c7ed6"
+
     avancement = ""
     if cible is not None:
         avancement += (
@@ -190,6 +205,7 @@ def _bloc_activite(activite, aujourdhui):
         if attendu_phys is not None:
             avancement += f" — Attendu aujourd'hui : {_fmt(attendu_phys, 0)} {escape(activite['unite_quantite'])}"
         avancement += "</div>"
+        avancement += _barre_progression(activite["taux_realisation"], couleur_activite)
     if budget is not None:
         avancement += (
             f'<div style="font-size:11px;">Avancement financier : '
@@ -199,6 +215,7 @@ def _bloc_activite(activite, aujourdhui):
         if attendu_fin is not None:
             avancement += f" — Attendu aujourd'hui : {_fmt(attendu_fin, 0)} FCFA"
         avancement += "</div>"
+        avancement += _barre_progression(activite["taux_execution_financiere"], "#12b886")
 
     lignes = []
     for h in reversed(activite["historique"]):
@@ -278,10 +295,12 @@ def exporter_suivi_pdf(projet) -> bytes:
         <div style="flex:1;border:1px solid #ddd;border-radius:6px;padding:10px;">
           <div style="font-size:9px;color:#666;text-transform:uppercase;">Exécution physique globale</div>
           <div style="font-size:20px;font-weight:700;">{_fmt_pct(data['taux_execution_physique_global'])}</div>
+          {_barre_progression(data['taux_execution_physique_global'], '#1c7ed6')}
         </div>
         <div style="flex:1;border:1px solid #ddd;border-radius:6px;padding:10px;">
           <div style="font-size:9px;color:#666;text-transform:uppercase;">Exécution financière globale</div>
           <div style="font-size:20px;font-weight:700;">{_fmt_pct(data['taux_execution_financiere_global'])}</div>
+          {_barre_progression(data['taux_execution_financiere_global'], '#12b886')}
         </div>
         <div style="flex:1;border:1px solid #ddd;border-radius:6px;padding:10px;">
           <div style="font-size:9px;color:#666;text-transform:uppercase;">Statut global</div>

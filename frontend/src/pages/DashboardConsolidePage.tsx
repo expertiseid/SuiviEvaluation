@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FolderKanban, Wallet, Users, Gauge } from "lucide-react";
+import { FolderKanban, Wallet, Users, Gauge, MapPin } from "lucide-react";
 import { Card, Paper, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { useDashboardConsolide } from "../api/dashboard";
 import { StatCard } from "../components/common/StatCard";
@@ -27,6 +27,19 @@ export function DashboardConsolidePage() {
         <StatCard label="Bénéficiaires" value={data.nombre_beneficiaires} icon={<Users size={20} />} color="grape" />
         <StatCard label="Indicateurs suivis" value={totalIndicateurs} icon={<Gauge size={20} />} color="orange" />
       </SimpleGrid>
+
+      {data.zones_couvertes.length > 0 && (
+        <Paper withBorder p="md" radius="md">
+          <Text size="xs" c="dimmed" fw={600} tt="uppercase" mb="sm" style={{ letterSpacing: 0.4 }}>
+            Couverture géographique
+          </Text>
+          <SimpleGrid cols={{ base: 2, xs: 4 }} spacing="md">
+            {data.zones_couvertes.map((z) => (
+              <StatCard key={z.niveau} label={z.niveau} value={z.count} icon={<MapPin size={20} />} color="cyan" />
+            ))}
+          </SimpleGrid>
+        </Paper>
+      )}
 
       <Paper withBorder p="md" radius="md">
         <Text size="xs" c="dimmed" fw={600} tt="uppercase" mb="sm" style={{ letterSpacing: 0.4 }}>

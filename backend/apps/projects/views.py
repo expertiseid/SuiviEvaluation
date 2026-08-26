@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from apps.accounts.constants import ROLES_NOTIFIEES_MODIFICATION_ACTIVITE
 from apps.core.permissions import HasGlobalVisibilityOrAssigned, IsAdminOrCreateForAuthenticated
-from apps.indicators.exports import generer_spss, generer_xlsform
+from apps.indicators.exports import generer_xlsform
 from apps.notifications.models import Notification
 from apps.notifications.services import notifier, notifier_par_role
 
@@ -73,14 +73,6 @@ class ProjetViewSet(viewsets.ModelViewSet):
             contenu, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         response["Content-Disposition"] = f"attachment; filename=xlsform_{projet.code}.xlsx"
-        return response
-
-    @action(detail=True, methods=["get"], url_path="export/spss")
-    def export_spss(self, request, pk=None):
-        projet = self.get_object()
-        contenu = generer_spss(projet)
-        response = HttpResponse(contenu, content_type="application/octet-stream")
-        response["Content-Disposition"] = f"attachment; filename=donnees_{projet.code}.sav"
         return response
 
     @action(detail=False, methods=["get"], url_path="modele-import")

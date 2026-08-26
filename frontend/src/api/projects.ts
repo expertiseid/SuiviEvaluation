@@ -212,13 +212,12 @@ export function useDeleteActivite() {
   });
 }
 
-export async function telechargerExportProjet(id: number, format: "xlsform" | "spss") {
+export async function telechargerExportProjet(id: number, format: "xlsform") {
   const response = await apiClient.get(`/projets/${id}/export/${format}/`, { responseType: "blob" });
-  const extension = format === "xlsform" ? "xlsx" : "sav";
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement("a");
   link.href = url;
-  link.setAttribute("download", `${format}_projet_${id}.${extension}`);
+  link.setAttribute("download", `${format}_projet_${id}.xlsx`);
   document.body.appendChild(link);
   link.click();
   link.remove();

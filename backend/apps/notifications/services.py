@@ -119,9 +119,54 @@ def lister_echeances(projet_ids, seuil_jours=None):
                 "projet_nom": projet.nom,
                 "date_fin": projet.date_fin,
                 "en_retard": projet.date_fin < today,
+                "est_rappel": False,
                 "lien": f"/suivi/{projet.id}",
             }
         )
+
+    # Rappels à date calendaire fixe (indépendants du seuil de jours) : une fois la date
+    # atteinte, l'alerte reste active tant que la date de rappel n'est pas retirée/changée.
+    activites_rappel = Activite.objects.exclude(statut=Activite.Statut.REALISEE).filter(
+        date_rappel__isnull=False,
+        date_rappel__lte=today,
+        objectif_specifique__objectif_general__projet__id__in=projet_ids,
+    ).select_related("objectif_specifique__objectif_general__projet")
+    for activite in activites_rappel:
+        projet = activite.objectif_specifique.objectif_general.projet
+        echeances.append(
+            {
+                "type": "ACTIVITE",
+                "id": activite.id,
+                "libelle": activite.libelle,
+                "projet_id": projet.id,
+                "projet_nom": projet.nom,
+                "date_fin": activite.date_rappel,
+                "en_retard": False,
+                "est_rappel": True,
+                "lien": f"/suivi/{projet.id}#activite-{activite.id}",
+            }
+        )
+
+    projets_rappel = Projet.objects.exclude(statut=Projet.Statut.CLOTURE).filter(
+        id__in=projet_ids, date_rappel__isnull=False, date_rappel__lte=today
+    )
+    for projet in projets_rappel:
+        echeances.append(
+            {
+                "type": "PROJET",
+                "id": projet.id,
+                "libelle": projet.nom,
+                "projet_id": projet.id,
+                "projet_nom": projet.nom,
+                "date_fin": projet.date_rappel,
+                "en_retard": False,
+                "est_rappel": True,
+                "lien": f"/suivi/{projet.id}",
+            }
+        )
+
+    for echeance in echeances:
+        echeance.setdefault("est_rappel", False)
 
     echeances.sort(key=lambda e: e["date_fin"])
     return echeances
