@@ -16,6 +16,8 @@ import io
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 
+from apps.core.excel_utils import figer_entete, quadriller
+
 
 def _prefixer(erreurs, etiquette):
     return [{"ligne": e["ligne"], "message": f"[{etiquette}] {e['message']}"} for e in erreurs]
@@ -37,6 +39,7 @@ def generer_modele_import_complet() -> bytes:
         feuille_cadre.append([cle, exemple])
     for ligne in feuille_cadre.iter_rows(min_col=1, max_col=1):
         ligne[0].font = Font(bold=True)
+    quadriller(feuille_cadre, max_col=2)
     feuille_cadre.column_dimensions["A"].width = 32
     feuille_cadre.column_dimensions["B"].width = 55
 
@@ -46,6 +49,12 @@ def generer_modele_import_complet() -> bytes:
         cellule.font = Font(bold=True)
     feuille_struct.append(["Amplifier la diffusion des pratiques agroécologiques", ""])
     feuille_struct.append(["", "Renforcement des capacités des producteurs et productrices"])
+    for _ in range(15):
+        feuille_struct.append(["", ""])
+    quadriller(feuille_struct, max_col=2)
+    figer_entete(feuille_struct)
+    feuille_struct.column_dimensions["A"].width = 45
+    feuille_struct.column_dimensions["B"].width = 45
 
     feuille_projet = wb.create_sheet("Projet")
     for cle, exemple in CHAMPS_PROJET:
@@ -54,6 +63,7 @@ def generer_modele_import_complet() -> bytes:
         feuille_projet.append([cle, exemple])
     for ligne in feuille_projet.iter_rows(min_col=1, max_col=1):
         ligne[0].font = Font(bold=True)
+    quadriller(feuille_projet, max_col=2)
     feuille_projet.column_dimensions["A"].width = 42
     feuille_projet.column_dimensions["B"].width = 48
 
@@ -65,11 +75,15 @@ def generer_modele_import_complet() -> bytes:
     for cellule in feuille_benef[1]:
         cellule.font = Font(bold=True)
     feuille_benef.append(
-        ["Traoré", "Awa", "F", "1990-05-12", "70000001", "CNIB123456", "CNIB", "BF", "Kadiogo", "Kadiogo", "Koubri", ""]
+        ["Traoré", "Awa", "F", "1990-05-12", "70000001", "CNIB123456", "CNIB", "BF", "Kadiogo", "Kadiogo", "Koubri", "", ""]
     )
     feuille_benef.append(
-        ["Kaboré", "Issa", "M", "1985-11-03", "70000002", "CNIB654321", "CNIB", "BF", "Kadiogo", "Kadiogo", "Koubri", ""]
+        ["Kaboré", "Issa", "M", "1985-11-03", "70000002", "CNIB654321", "CNIB", "BF", "Kadiogo", "Kadiogo", "Koubri", "", ""]
     )
+    for _ in range(15):
+        feuille_benef.append([""] * len(COLONNES_BENEFICIAIRES))
+    quadriller(feuille_benef, max_col=len(COLONNES_BENEFICIAIRES))
+    figer_entete(feuille_benef)
 
     generer_feuille_paliers_alerte(wb)
 

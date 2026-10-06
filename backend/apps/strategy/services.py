@@ -20,11 +20,28 @@ fichier met à jour les éléments déjà créés (même niveau, même nom, mêm
 parent) plutôt que de les dupliquer.
 """
 import io
+import re
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
+
+from apps.core.excel_utils import figer_entete, quadriller
+
+# Reconnaît le format "CODE — Nom" tel que généré par exporter_structuration
+# (code = un seul mot sans espace, ex : "AXE1", "OR1.1") — permet de
+# réimporter tel quel un export sans dupliquer les éléments qui ont un code
+# (le rattachement se ferait sinon sur "CODE — Nom" entier, jamais égal au
+# nom seul stocké en base).
+RE_CODE_NOM = re.compile(r"^(\S+) — (.+)$")
+
+
+def _decouper_code_nom(texte: str) -> tuple[str, str]:
+    match = RE_CODE_NOM.match(texte)
+    if match:
+        return match.group(1), match.group(2)
+    return "", texte
 
 NOMS_NIVEAUX_EXEMPLE = ["Orientation stratégique", "Axe d'intervention"]
 
@@ -51,6 +68,13 @@ def generer_modele_import(cadre_strategique) -> bytes:
     if not niveaux:
         for ligne in LIGNES_EXEMPLE:
             feuille.append(ligne)
+
+    for _ in range(20):
+        feuille.append([""] * len(noms_colonnes))
+    quadriller(feuille, max_col=len(noms_colonnes))
+    figer_entete(feuille)
+    for i in range(len(noms_colonnes)):
+        feuille.column_dimensions[chr(ord("A") + i)].width = 42
 
     instructions = wb.create_sheet("Instructions")
     instructions.append([f"Cadre stratégique : {cadre_strategique.nom}"])
@@ -100,6 +124,8 @@ def exporter_structuration(cadre_strategique) -> bytes:
     feuille.append(noms_colonnes)
     for cellule in feuille[1]:
         cellule.font = Font(bold=True)
+    for i in range(len(noms_colonnes)):
+        feuille.column_dimensions[chr(ord("A") + i)].width = 42
 
     def visiter(element):
         colonne = colonne_par_niveau.get(element.type_niveau_id)
@@ -112,6 +138,11 @@ def exporter_structuration(cadre_strategique) -> bytes:
 
     for racine in enfants_par_parent.get(None, []):
         visiter(racine)
+
+    for _ in range(15):
+        feuille.append([""] * len(noms_colonnes))
+    quadriller(feuille, max_col=len(noms_colonnes))
+    figer_entete(feuille)
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -197,7 +228,7 @@ def importer_structuration_depuis_feuille(feuille, cadre_strategique) -> dict:
             continue
 
         idx = colonnes_remplies[0]
-        nom = str(cellules[idx]).strip()
+        code, nom = _decouper_code_nom(str(cellules[idx]).strip())
         type_niveau = types_par_colonne[idx]
 
         element_parent = None
@@ -224,6 +255,8 @@ def importer_structuration_depuis_feuille(feuille, cadre_strategique) -> dict:
         instance.type_niveau = type_niveau
         instance.element_parent = element_parent
         instance.nom = nom
+        if code:
+            instance.code = code
 
         try:
             instance.clean()

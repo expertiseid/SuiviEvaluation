@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Check, Download, MapPin, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, Download, MapPin, Paperclip, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
 import {
   ActionIcon,
   Badge,
   Button,
   Card,
   Group,
-  List,
   Menu,
   Modal,
   Stack,
@@ -33,10 +32,12 @@ import {
   telechargerExportProjet,
 } from "../../api/projects";
 import { useDashboardProjet } from "../../api/dashboard";
+import { telechargerExportSuiviExcel, telechargerExportSuiviPdf } from "../../api/suivi";
 import { AlerteBadge } from "../../components/indicators/AlerteBadge";
 import { confirmerSuppression } from "../../components/common/confirmerSuppression";
 import { HistoriqueModification } from "../../components/audit/HistoriqueModification";
 import { DocumentsTab } from "../../components/documents/DocumentsTab";
+import { BeneficiairesTab } from "../../components/beneficiaires/BeneficiairesTab";
 import { BoutonModeEdition } from "../../components/common/BoutonModeEdition";
 import { ActiviteForm } from "./ActiviteForm";
 import { SousActiviteForm } from "./SousActiviteForm";
@@ -167,6 +168,10 @@ export function ProjetDetailPage() {
   const [modalActiviteFor, setModalActiviteFor] = useState<number | null>(null);
   const [modalActiviteEdition, setModalActiviteEdition] = useState<Activite | null>(null);
   const [modalSousActiviteFor, setModalSousActiviteFor] = useState<number | null>(null);
+  const [documentsActiviteId, setDocumentsActiviteId] = useState<number | null>(null);
+  const [documentsSousActiviteId, setDocumentsSousActiviteId] = useState<number | null>(null);
+  const [beneficiairesActiviteId, setBeneficiairesActiviteId] = useState<number | null>(null);
+  const [beneficiairesSousActiviteId, setBeneficiairesSousActiviteId] = useState<number | null>(null);
   const [modalEditionOuvert, setModalEditionOuvert] = useState(false);
   const [recherchePlan, setRecherchePlan] = useState("");
   const [editionActive, setEditionActive] = useState(false);
@@ -204,7 +209,7 @@ export function ProjetDetailPage() {
   function handleSupprimer() {
     if (!projet) return;
     confirmerSuppression({
-      message: `Supprimer le projet "${projet.nom}" ainsi que toute sa planification, ses indicateurs et ses rapports ? Cette action est irréversible.`,
+      message: `Supprimer le projet "${projet.nom}" ainsi que toute sa planification et ses indicateurs ? Cette action est irréversible.`,
       onConfirm: async () => {
         try {
           await deleteProjet.mutateAsync(projetId);
@@ -275,6 +280,13 @@ export function ProjetDetailPage() {
               <Button variant="light" leftSection={<Download size={16} />}>Exporter</Button>
             </Menu.Target>
             <Menu.Dropdown>
+              <Menu.Label>Planification et suivi</Menu.Label>
+              <Menu.Item onClick={() => telechargerExportSuiviExcel(projetId, projet.code)}>
+                Excel
+              </Menu.Item>
+              <Menu.Item onClick={() => telechargerExportSuiviPdf(projetId, projet.code)}>
+                PDF
+              </Menu.Item>
               <Menu.Label>Pour la collecte terrain</Menu.Label>
               <Menu.Item onClick={() => telechargerExportProjet(projetId, "xlsform")}>
                 XLSForm (KoboToolbox/ODK)
@@ -357,101 +369,151 @@ export function ProjetDetailPage() {
                 {recherchePlan.trim() && objectifsSpecifiquesFiltres.length === 0 && (
                   <Text c="dimmed" size="sm" mt="sm">Aucun résultat ne correspond à la recherche.</Text>
                 )}
-                <List mt="sm" spacing="xs">
+                <Stack mt="sm" gap="sm">
                   {objectifsSpecifiquesFiltres.map((os) => (
-                    <List.Item key={os.id}>
-                      <Badge color="blue" variant="light" size="sm" mb={4}>Objectif spécifique</Badge>
-                      <Group gap={6}>
-                        <LibelleEditable
-                          valeur={os.libelle}
-                          onSave={(libelle) => updateOS.mutate({ id: os.id, payload: { libelle } })}
-                          onDelete={() =>
-                            supprimerAvecConfirmation(
-                              `Supprimer l'objectif spécifique "${os.libelle}" ainsi que ses activités, sous-activités et indicateurs liés ? Cette action est irréversible.`,
-                              () => deleteOS.mutateAsync(os.id),
-                              "Objectif spécifique supprimé",
-                            )
-                          }
-                          editable={editionActive}
-                        />
+                    <Card key={os.id} withBorder radius="md" padding="sm" style={{ borderLeft: "4px solid var(--mantine-color-blue-5)" }}>
+                      <Group justify="space-between" align="flex-start" wrap="wrap">
+                        <div>
+                          <Badge color="blue" variant="light" size="sm" mb={4}>Objectif spécifique</Badge>
+                          <LibelleEditable
+                            valeur={os.libelle}
+                            onSave={(libelle) => updateOS.mutate({ id: os.id, payload: { libelle } })}
+                            onDelete={() =>
+                              supprimerAvecConfirmation(
+                                `Supprimer l'objectif spécifique "${os.libelle}" ainsi que ses activités, sous-activités et indicateurs liés ? Cette action est irréversible.`,
+                                () => deleteOS.mutateAsync(os.id),
+                                "Objectif spécifique supprimé",
+                              )
+                            }
+                            editable={editionActive}
+                          />
+                        </div>
                         <Tooltip label="Nouvelle activité">
                           <ActionIcon size="sm" variant="subtle" onClick={() => setModalActiviteFor(os.id)}>
                             <Plus size={14} />
                           </ActionIcon>
                         </Tooltip>
                       </Group>
-                      <List mt={4} withPadding spacing={4}>
-                        {os.activites.map((act) => (
-                          <List.Item key={act.id}>
-                            <Badge color="grape" variant="light" size="xs" mb={4}>Activité</Badge>
-                            <Group gap={6} wrap="nowrap">
-                              {act.code_activite && <Text size="xs" c="dimmed">{act.code_activite}</Text>}
-                              <Text size="sm">{act.libelle}</Text>
-                              {editionActive && (
-                                <Tooltip label="Modifier l'activité">
-                                  <ActionIcon size="sm" variant="subtle" onClick={() => setModalActiviteEdition(act)}>
-                                    <Pencil size={12} />
-                                  </ActionIcon>
-                                </Tooltip>
-                              )}
-                              <Tooltip label="Nouvelle sous-activité">
-                                <ActionIcon size="sm" variant="subtle" onClick={() => setModalSousActiviteFor(act.id)}>
-                                  <Plus size={14} />
-                                </ActionIcon>
-                              </Tooltip>
-                              {editionActive && (
-                                <Tooltip label="Supprimer l'activité">
-                                  <ActionIcon
-                                    size="sm"
-                                    variant="subtle"
-                                    color="red"
-                                    onClick={() =>
-                                      supprimerAvecConfirmation(
-                                        `Supprimer l'activité "${act.libelle}" ainsi que ses sous-activités et indicateurs liés ? Cette action est irréversible.`,
-                                        () => deleteActivite.mutateAsync(act.id),
-                                        "Activité supprimée",
-                                      )
-                                    }
-                                  >
-                                    <Trash2 size={12} />
-                                  </ActionIcon>
-                                </Tooltip>
-                              )}
-                            </Group>
-                            <List mt={2} withPadding size="sm">
-                              {act.sous_activites.map((sa) => (
-                                <List.Item key={sa.id}>
-                                  <Badge color="gray" variant="light" size="xs" mb={2}>Sous-activité</Badge>
-                                  <Group gap={6} wrap="nowrap">
-                                    <Text size="sm">{sa.libelle}</Text>
-                                    {editionActive && (
-                                      <Tooltip label="Supprimer la sous-activité">
-                                        <ActionIcon
-                                          size="sm"
-                                          variant="subtle"
-                                          color="red"
-                                          onClick={() =>
-                                            supprimerAvecConfirmation(
-                                              `Supprimer la sous-activité "${sa.libelle}" ? Cette action est irréversible.`,
-                                              () => deleteSousActivite.mutateAsync(sa.id),
-                                              "Sous-activité supprimée",
-                                            )
-                                          }
-                                        >
-                                          <Trash2 size={12} />
-                                        </ActionIcon>
-                                      </Tooltip>
-                                    )}
+
+                      {os.activites.length > 0 && (
+                        <Stack mt="sm" gap="xs" pl="md">
+                          {os.activites.map((act) => (
+                            <Card key={act.id} withBorder radius="sm" padding="xs" bg="gray.0" style={{ borderLeft: "3px solid var(--mantine-color-grape-5)" }}>
+                              <Group justify="space-between" align="flex-start" wrap="wrap">
+                                <div>
+                                  <Group gap={6} wrap="wrap">
+                                    <Badge color="grape" variant="light" size="xs">Activité</Badge>
+                                    {act.code_activite && <Text size="xs" c="dimmed">{act.code_activite}</Text>}
+                                    <Text size="sm" fw={500}>{act.libelle}</Text>
                                   </Group>
-                                </List.Item>
-                              ))}
-                            </List>
-                          </List.Item>
-                        ))}
-                      </List>
-                    </List.Item>
+                                  {(act.date_debut || act.date_fin) && (
+                                    <Text size="xs" c="dimmed" mt={2}>
+                                      {act.date_debut ?? "?"} → {act.date_fin ?? "?"}
+                                    </Text>
+                                  )}
+                                </div>
+                                <Group gap={4} wrap="nowrap">
+                                  <Tooltip label="Documents liés">
+                                    <ActionIcon size="sm" variant="subtle" onClick={() => setDocumentsActiviteId(act.id)}>
+                                      <Paperclip size={12} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                  <Tooltip label="Bénéficiaires liés">
+                                    <ActionIcon size="sm" variant="subtle" onClick={() => setBeneficiairesActiviteId(act.id)}>
+                                      <Users size={12} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                  {editionActive && (
+                                    <Tooltip label="Modifier l'activité">
+                                      <ActionIcon size="sm" variant="subtle" onClick={() => setModalActiviteEdition(act)}>
+                                        <Pencil size={12} />
+                                      </ActionIcon>
+                                    </Tooltip>
+                                  )}
+                                  <Tooltip label="Nouvelle sous-activité">
+                                    <ActionIcon size="sm" variant="subtle" onClick={() => setModalSousActiviteFor(act.id)}>
+                                      <Plus size={14} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                  {editionActive && (
+                                    <Tooltip label="Supprimer l'activité">
+                                      <ActionIcon
+                                        size="sm"
+                                        variant="subtle"
+                                        color="red"
+                                        onClick={() =>
+                                          supprimerAvecConfirmation(
+                                            `Supprimer l'activité "${act.libelle}" ainsi que ses sous-activités et indicateurs liés ? Cette action est irréversible.`,
+                                            () => deleteActivite.mutateAsync(act.id),
+                                            "Activité supprimée",
+                                          )
+                                        }
+                                      >
+                                        <Trash2 size={12} />
+                                      </ActionIcon>
+                                    </Tooltip>
+                                  )}
+                                </Group>
+                              </Group>
+
+                              {act.sous_activites.length > 0 && (
+                                <Stack mt={6} gap={6} pl="md">
+                                  {act.sous_activites.map((sa) => (
+                                    <Card key={sa.id} withBorder radius="sm" padding={6} bg="white" style={{ borderLeft: "3px solid var(--mantine-color-gray-5)" }}>
+                                      <Group justify="space-between" align="center" wrap="wrap">
+                                        <div>
+                                          <Group gap={6} wrap="wrap">
+                                            <Badge color="gray" variant="light" size="xs">Sous-activité</Badge>
+                                            <Text size="sm">{sa.libelle}</Text>
+                                          </Group>
+                                          {(sa.date_debut || sa.date_fin) && (
+                                            <Text size="xs" c="dimmed" mt={2}>
+                                              {sa.date_debut ?? "?"} → {sa.date_fin ?? "?"}
+                                            </Text>
+                                          )}
+                                        </div>
+                                        <Group gap={4} wrap="nowrap">
+                                          <Tooltip label="Documents liés">
+                                            <ActionIcon size="sm" variant="subtle" onClick={() => setDocumentsSousActiviteId(sa.id)}>
+                                              <Paperclip size={12} />
+                                            </ActionIcon>
+                                          </Tooltip>
+                                          <Tooltip label="Bénéficiaires liés">
+                                            <ActionIcon size="sm" variant="subtle" onClick={() => setBeneficiairesSousActiviteId(sa.id)}>
+                                              <Users size={12} />
+                                            </ActionIcon>
+                                          </Tooltip>
+                                          {editionActive && (
+                                            <Tooltip label="Supprimer la sous-activité">
+                                              <ActionIcon
+                                                size="sm"
+                                                variant="subtle"
+                                                color="red"
+                                                onClick={() =>
+                                                  supprimerAvecConfirmation(
+                                                    `Supprimer la sous-activité "${sa.libelle}" ? Cette action est irréversible.`,
+                                                    () => deleteSousActivite.mutateAsync(sa.id),
+                                                    "Sous-activité supprimée",
+                                                  )
+                                                }
+                                              >
+                                                <Trash2 size={12} />
+                                              </ActionIcon>
+                                            </Tooltip>
+                                          )}
+                                        </Group>
+                                      </Group>
+                                    </Card>
+                                  ))}
+                                </Stack>
+                              )}
+                            </Card>
+                          ))}
+                        </Stack>
+                      )}
+                    </Card>
                   ))}
-                </List>
+                </Stack>
               </>
             )}
           </Card>
@@ -542,6 +604,46 @@ export function ProjetDetailPage() {
 
       <Modal opened={modalEditionOuvert} onClose={() => setModalEditionOuvert(false)} title="Modifier le projet" size="lg">
         <ProjetForm projet={projet} onDone={() => setModalEditionOuvert(false)} />
+      </Modal>
+
+      <Modal
+        opened={documentsActiviteId !== null}
+        onClose={() => setDocumentsActiviteId(null)}
+        title="Documents liés à l'activité"
+        size="lg"
+      >
+        {documentsActiviteId !== null && <DocumentsTab activiteId={documentsActiviteId} />}
+      </Modal>
+
+      <Modal
+        opened={documentsSousActiviteId !== null}
+        onClose={() => setDocumentsSousActiviteId(null)}
+        title="Documents liés à la sous-activité"
+        size="lg"
+      >
+        {documentsSousActiviteId !== null && <DocumentsTab sousActiviteId={documentsSousActiviteId} />}
+      </Modal>
+
+      <Modal
+        opened={beneficiairesActiviteId !== null}
+        onClose={() => setBeneficiairesActiviteId(null)}
+        title="Bénéficiaires liés à l'activité"
+        size="lg"
+      >
+        {beneficiairesActiviteId !== null && (
+          <BeneficiairesTab projetId={projetId} activiteId={beneficiairesActiviteId} />
+        )}
+      </Modal>
+
+      <Modal
+        opened={beneficiairesSousActiviteId !== null}
+        onClose={() => setBeneficiairesSousActiviteId(null)}
+        title="Bénéficiaires liés à la sous-activité"
+        size="lg"
+      >
+        {beneficiairesSousActiviteId !== null && (
+          <BeneficiairesTab projetId={projetId} sousActiviteId={beneficiairesSousActiviteId} />
+        )}
       </Modal>
     </Stack>
   );

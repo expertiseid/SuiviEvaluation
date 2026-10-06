@@ -15,6 +15,26 @@ class StatutParticulier(TimestampedModel):
         return self.libelle
 
 
+class TypeActiviteBeneficiaire(TimestampedModel):
+    """
+    Référentiel extensible de l'activité économique menée par le
+    bénéficiaire (maraîchage, élevage, petit commerce...) — créable à la
+    volée depuis la fiche bénéficiaire si l'activité voulue n'y figure pas
+    encore, même logique que StatutParticulier.
+    """
+
+    code = models.CharField(max_length=50, unique=True)
+    libelle = models.CharField(max_length=100)
+
+    class Meta:
+        verbose_name = "Type d'activité du bénéficiaire"
+        verbose_name_plural = "Types d'activité des bénéficiaires"
+        ordering = ("libelle",)
+
+    def __str__(self):
+        return self.libelle
+
+
 class Beneficiaire(TimestampedModel):
     class Sexe(models.TextChoices):
         FEMININ = "F", "Féminin"
@@ -32,6 +52,12 @@ class Beneficiaire(TimestampedModel):
     )
     zone = models.ForeignKey("geo.Zone", null=True, blank=True, on_delete=models.PROTECT, related_name="beneficiaires")
     statuts_particuliers = models.ManyToManyField(StatutParticulier, blank=True, related_name="beneficiaires")
+    types_activite = models.ManyToManyField(
+        TypeActiviteBeneficiaire,
+        blank=True,
+        related_name="beneficiaires",
+        help_text="Activité(s) économique(s) menée(s) par le bénéficiaire (maraîchage, élevage...).",
+    )
 
     history = HistoricalRecords()
 
@@ -51,6 +77,12 @@ class ParticipationProjet(TimestampedModel):
 
     beneficiaire = models.ForeignKey(Beneficiaire, on_delete=models.PROTECT, related_name="participations")
     projet = models.ForeignKey("projects.Projet", on_delete=models.PROTECT, related_name="participations")
+    activite = models.ForeignKey(
+        "projects.Activite", null=True, blank=True, on_delete=models.CASCADE, related_name="participations"
+    )
+    sous_activite = models.ForeignKey(
+        "projects.SousActivite", null=True, blank=True, on_delete=models.CASCADE, related_name="participations"
+    )
     date_inscription = models.DateField()
     role_dans_projet = models.CharField(max_length=150, blank=True)
 

@@ -1,5 +1,5 @@
 import type { StatusTone } from "../components/common/StatusBadge";
-import type { StatutActivite, StatutProjet, StatutRapport } from "../types";
+import type { StatutActivite, StatutProjet } from "../types";
 
 export const PROJET_STATUT_TONE: Record<StatutProjet, StatusTone> = {
   EN_PREPARATION: "neutral",
@@ -41,16 +41,4 @@ export const SUIVI_STATUT_GLOBAL_LABEL: Record<string, string> = {
   ATTEINT: "Atteint",
   EN_COURS: "En cours",
   EN_RETARD: "En retard",
-};
-
-export const RAPPORT_STATUT_TONE: Record<StatutRapport, StatusTone> = {
-  BROUILLON: "neutral",
-  SOUMIS: "warning",
-  VALIDE: "success",
-};
-
-export const RAPPORT_STATUT_LABEL: Record<StatutRapport, string> = {
-  BROUILLON: "Brouillon",
-  SOUMIS: "Soumis",
-  VALIDE: "Validé",
 };

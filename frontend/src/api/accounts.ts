@@ -26,3 +26,13 @@ export function useUpdateUtilisateur() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["utilisateurs"] }),
   });
 }
+
+export function useDeleteUtilisateur() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/utilisateurs/${id}/`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["utilisateurs"] }),
+  });
+}

@@ -12,7 +12,6 @@ from django.db.models import Q
 def supprimer_projet_cascade(projet):
     from apps.beneficiaries.models import ParticipationProjet
     from apps.indicators.models import Indicateur, ValeurIndicateur
-    from apps.reports.models import RapportSuivi
     from apps.suivi.models import PointSuivi
 
     from .models import Activite, ObjectifGeneral, ObjectifSpecifique, SousActivite
@@ -40,7 +39,6 @@ def supprimer_projet_cascade(projet):
         objectifs_generaux.delete()
 
         ParticipationProjet.objects.filter(projet=projet).delete()
-        RapportSuivi.objects.filter(projet=projet).delete()
 
         # Documents/Dossiers/Financements sont déjà en CASCADE sur Projet,
         # supprimés automatiquement par le projet.delete() ci-dessous.

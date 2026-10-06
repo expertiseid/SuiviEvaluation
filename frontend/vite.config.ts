@@ -9,5 +9,8 @@ export default defineConfig({
       usePolling: true,
       interval: 300,
     },
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS
+      ? process.env.VITE_ALLOWED_HOSTS.split(",")
+      : undefined,
   },
 })

@@ -6,7 +6,6 @@ import {
   Activity,
   Users,
   Copy,
-  FileText,
   UserCog,
   Target,
   MapPin,
@@ -33,7 +32,6 @@ const ITEMS_PRINCIPAUX: NavItem[] = [
   { to: "/suivi", label: "Suivi", icon: Activity },
   { to: "/beneficiaires", label: "Bénéficiaires", icon: Users },
   { to: "/doublons", label: "Doublons signalés", icon: Copy },
-  { to: "/rapports", label: "Rapports de suivi", icon: FileText },
   { to: "/zones-administratives", label: "Zones administratives", icon: MapPin },
 ];
 

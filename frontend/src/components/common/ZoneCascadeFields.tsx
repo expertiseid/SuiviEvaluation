@@ -20,6 +20,24 @@ export function zoneResolueDe(value: ZoneCascadeValue, niveaux: NiveauAdministra
   return null;
 }
 
+/**
+ * Opération inverse de zoneResolueDe : reconstruit la valeur de chaque
+ * niveau de la cascade en remontant la chaîne `parent` à partir d'une seule
+ * zone (la plus précise) déjà enregistrée — utile pour pré-remplir le
+ * formulaire en édition, où seule cette zone finale est connue.
+ */
+export function zoneCascadeDepuis(zoneId: number | null | undefined, zones: Zone[]): ZoneCascadeValue {
+  if (!zoneId) return {};
+  const zonesParId = new Map(zones.map((z) => [z.id, z]));
+  const valeur: ZoneCascadeValue = {};
+  let courante = zonesParId.get(zoneId);
+  while (courante) {
+    valeur[courante.niveau_administratif] = String(courante.id);
+    courante = courante.parent ? zonesParId.get(courante.parent) : undefined;
+  }
+  return valeur;
+}
+
 function NiveauSelect({
   niveau,
   zones,

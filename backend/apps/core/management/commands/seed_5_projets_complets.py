@@ -4,21 +4,19 @@ intervenants, bénéficiaires, partenaires/bailleurs, notifications) et les
 remplace par 5 cadres stratégiques et 5 projets entièrement renseignés — un
 projet par cadre, chacun avec sa planification complète (objectifs,
 activités, sous-activités), ses indicateurs et leur historique de valeurs,
-ses zones d'intervention, son équipe, ses bénéficiaires, son financement et
-un rapport de suivi.
+ses zones d'intervention, son équipe, ses bénéficiaires et son financement.
 
 Les comptes utilisateurs (accounts_user) ne sont jamais touchés. Le
 référentiel géographique (geo_zone) n'est pas régénéré, mais les zones de
 test orphelines créées lors de vérifications précédentes (Djibo, Koubri,
 Ouagadougou-village, VillageTest79125) sont supprimées.
 """
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.utils import timezone as dj_timezone
 
 from apps.beneficiaries.models import Beneficiaire, ParticipationProjet, SignalementDoublon, StatutParticulier
 from apps.geo.models import NiveauAdministratif, Zone
@@ -28,7 +26,6 @@ from apps.notifications.models import Notification
 from apps.partners.models import Bailleur, Financement, Partenaire
 from apps.projects.models import Activite, Equipe, ObjectifGeneral, ObjectifSpecifique, Projet, SousActivite
 from apps.projects.services import supprimer_projet_cascade
-from apps.reports.models import RapportSuivi
 from apps.strategy.models import CadreStrategique, ElementStrategique, TypeNiveau
 from apps.strategy.services import supprimer_cadre_strategique_cascade
 
@@ -135,11 +132,6 @@ PROFILS = [
             ("KABORE", "Boureima", "M", []), ("YAMEOGO", "Salamata", "F", ["jeune", "femme_chef_menage"]),
             ("NANA", "Issa", "M", ["handicap"]),
         ],
-        "rapport": (
-            date(2026, 1, 1), date(2026, 6, 30), RapportSuivi.TypeRapport.TRIMESTRIEL, RapportSuivi.Statut.VALIDE,
-            "Au premier semestre 2026, 750 producteurs et productrices ont été formés aux techniques agroécologiques "
-            "(62% de la cible), et 95 hectares ont été aménagés en dispositifs de conservation des eaux et des sols.",
-        ),
         "grille_alerte": None,
     },
     {
@@ -231,11 +223,6 @@ PROFILS = [
             ("MAIGA", "Fatoumata", "F", ["pdi", "femme_chef_menage"]), ("CISSE", "Boureima", "M", ["pdi"]),
             ("DICKO", "Aissa", "F", ["jeune"]), ("TOURE", "Hamidou", "M", []), ("BARRY", "Zenabou", "F", ["pdi", "jeune"]),
         ],
-        "rapport": (
-            date(2026, 2, 1), date(2026, 7, 31), RapportSuivi.TypeRapport.TRIMESTRIEL, RapportSuivi.Statut.SOUMIS,
-            "Sur les six premiers mois, 11 200 têtes de bétail ont été vaccinées (45% de la cible) et 9 points d'eau "
-            "pastoraux sur 25 ont été réhabilités. Le contexte sécuritaire ralentit l'accès à certaines zones du Seno.",
-        ),
         "grille_alerte": [(0, "Critique", "#c92a2a"), (40, "En retard", "#e8590c"), (65, "Sur la bonne voie", "#2f9e44"), (90, "Atteint", "#087f5b")],
     },
     {
@@ -328,11 +315,6 @@ PROFILS = [
             ("ZERBO", "Awa", "F", ["jeune", "femme_chef_menage"]), ("OUEDRAOGO", "Boukary", "M", ["jeune"]),
             ("SANA", "Ramata", "F", ["jeune", "handicap"]),
         ],
-        "rapport": (
-            date(2026, 3, 1), date(2026, 8, 31), RapportSuivi.TypeRapport.TRIMESTRIEL, RapportSuivi.Statut.BROUILLON,
-            "690 apprenants inscrits dans les centres d'alphabétisation sur les 1800 prévus (38%). Le démarrage des "
-            "formations professionnelles a pris du retard faute de formateurs qualifiés disponibles localement.",
-        ),
         "grille_alerte": None,
     },
     {
@@ -425,11 +407,6 @@ PROFILS = [
             ("KAMBOU", "Alizeta", "F", ["pdi", "femme_chef_menage"]), ("DA", "Bakary", "M", ["handicap"]),
             ("PALM", "Rihanata", "F", ["jeune", "pdi"]),
         ],
-        "rapport": (
-            date(2026, 1, 15), date(2026, 6, 30), RapportSuivi.TypeRapport.TRIMESTRIEL, RapportSuivi.Statut.VALIDE,
-            "4 200 enfants dépistés sur 9 000 prévus (47%), avec un taux de référencement satisfaisant vers les CSPS. "
-            "L'adhésion aux groupes de soutien mère-à-mère progresse plus lentement que prévu dans les zones enclavées.",
-        ),
         "grille_alerte": [(0, "Alerte rouge", "#c92a2a"), (50, "Vigilance", "#f08c00"), (75, "Conforme", "#2f9e44")],
     },
     {
@@ -521,11 +498,6 @@ PROFILS = [
             ("OUEDRAOGO", "Salif", "M", ["pdi"]), ("TAPSOBA", "Assita", "F", ["pdi", "femme_chef_menage"]),
             ("ILBOUDO", "Rasmane", "M", []), ("KABRE", "Nathalie", "F", ["jeune"]), ("BONKOUNGOU", "Abdoulaye", "M", ["pdi", "jeune"]),
         ],
-        "rapport": (
-            date(2026, 4, 1), date(2026, 9, 30), RapportSuivi.TypeRapport.TRIMESTRIEL, RapportSuivi.Statut.SOUMIS,
-            "19 cadres de concertation villageois sur 35 sont désormais appuyés, et 11 conflits communautaires ont été "
-            "résolus par médiation locale. La cohabitation entre populations hôtes et déplacées reste sensible dans le Gnagna.",
-        ),
         "grille_alerte": None,
     },
 ]
@@ -824,20 +796,6 @@ class Command(BaseCommand):
                 date_inscription=profil["date_debut"],
                 role_dans_projet="Bénéficiaire direct",
             )
-
-        # Rapport de suivi
-        periode_debut, periode_fin, type_rapport, statut_rapport, contenu = profil["rapport"]
-        RapportSuivi.objects.create(
-            projet=projet,
-            periode_debut=periode_debut,
-            periode_fin=periode_fin,
-            type_rapport=type_rapport,
-            redige_par=users["charge_se"] or users["chef_projet"],
-            contenu=contenu,
-            statut=statut_rapport,
-            date_validation=dj_timezone.make_aware(datetime(periode_fin.year, periode_fin.month, min(periode_fin.day, 28))) if statut_rapport == RapportSuivi.Statut.VALIDE else None,
-            valide_par=users["coordo"] if statut_rapport == RapportSuivi.Statut.VALIDE else None,
-        )
 
     # ------------------------------------------------------------------
     # Helper indicateurs

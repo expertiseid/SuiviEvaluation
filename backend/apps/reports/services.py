@@ -1,5 +1,5 @@
 """
-Calculs agrégés exposés par le rapport de suivi — jamais stockés, toujours
+Calculs agrégés de progression d'un projet — jamais stockés, toujours
 recalculés à la volée pour éviter toute désynchronisation.
 """
 SEUIL_STATUT_ATTEINT = 80
@@ -46,26 +46,3 @@ def statut_global(projet):
     if taux_phys is not None and taux_fin is not None and taux_phys >= SEUIL_STATUT_ATTEINT and taux_fin >= SEUIL_STATUT_ATTEINT:
         return "ATTEINT"
     return "EN_COURS"
-
-
-def statistiques_zones(projet):
-    from apps.beneficiaries.models import ParticipationProjet
-
-    compteurs = {}
-    for participation in ParticipationProjet.objects.filter(projet=projet).select_related("beneficiaire__zone"):
-        zone = participation.beneficiaire.zone
-        if zone:
-            compteurs[zone.nom] = compteurs.get(zone.nom, 0) + 1
-    return compteurs
-
-
-def statistiques_beneficiaires(projet):
-    from apps.beneficiaries.models import ParticipationProjet, SignalementDoublon
-
-    beneficiaire_ids = list(
-        ParticipationProjet.objects.filter(projet=projet).values_list("beneficiaire_id", flat=True).distinct()
-    )
-    doublons = SignalementDoublon.objects.filter(
-        beneficiaire_1_id__in=beneficiaire_ids, beneficiaire_2_id__in=beneficiaire_ids
-    ).count()
-    return {"nombre_beneficiaires_uniques": len(beneficiaire_ids), "doublons_detectes": doublons}

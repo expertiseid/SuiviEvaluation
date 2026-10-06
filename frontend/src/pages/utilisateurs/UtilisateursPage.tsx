@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import {
   ActionIcon,
   Badge,
@@ -17,7 +17,10 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useCreateUtilisateur, useUpdateUtilisateur, useUtilisateurs } from "../../api/accounts";
+import { useAuth } from "../../auth/useAuth";
+import { useCreateUtilisateur, useDeleteUtilisateur, useUpdateUtilisateur, useUtilisateurs } from "../../api/accounts";
+import { confirmerSuppression } from "../../components/common/confirmerSuppression";
+import { messageErreurApi } from "../../utils/erreurs";
 import type { User } from "../../types";
 
 const ROLES = [
@@ -121,9 +124,28 @@ function ModifierUtilisateurModal({ utilisateur, onClose }: { utilisateur: User 
 }
 
 export function UtilisateursPage() {
+  const { user: utilisateurConnecte } = useAuth();
   const { data: utilisateurs, isLoading } = useUtilisateurs();
   const createUtilisateur = useCreateUtilisateur();
+  const deleteUtilisateur = useDeleteUtilisateur();
   const [utilisateurEnEdition, setUtilisateurEnEdition] = useState<User | null>(null);
+
+  function handleSupprimer(u: User) {
+    confirmerSuppression({
+      message: `Supprimer l'utilisateur "${u.username}" ? Cette action est irréversible.`,
+      onConfirm: async () => {
+        try {
+          await deleteUtilisateur.mutateAsync(u.id);
+          notifications.show({ message: "Utilisateur supprimé", color: "green" });
+        } catch (error) {
+          notifications.show({
+            message: messageErreurApi(error, "Erreur lors de la suppression de l'utilisateur"),
+            color: "red",
+          });
+        }
+      },
+    });
+  }
 
   const [username, setUsername] = useState("");
   const [prenom, setPrenom] = useState("");
@@ -222,11 +244,25 @@ export function UtilisateursPage() {
                 </Table.Td>
                 <Table.Td>{u.is_active ? "Oui" : "Non"}</Table.Td>
                 <Table.Td>
-                  <Tooltip label="Modifier">
-                    <ActionIcon size="sm" variant="subtle" onClick={() => setUtilisateurEnEdition(u)}>
-                      <Pencil size={13} />
-                    </ActionIcon>
-                  </Tooltip>
+                  <Group gap={4} wrap="nowrap">
+                    <Tooltip label="Modifier">
+                      <ActionIcon size="sm" variant="subtle" onClick={() => setUtilisateurEnEdition(u)}>
+                        <Pencil size={13} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label={u.id === utilisateurConnecte?.id ? "Impossible de supprimer ton propre compte" : "Supprimer"}>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="red"
+                        disabled={u.id === utilisateurConnecte?.id}
+                        loading={deleteUtilisateur.isPending && deleteUtilisateur.variables === u.id}
+                        onClick={() => handleSupprimer(u)}
+                      >
+                        <Trash2 size={13} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
                 </Table.Td>
               </Table.Tr>
             ))}

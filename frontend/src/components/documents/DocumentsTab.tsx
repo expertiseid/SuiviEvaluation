@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText, FolderPlus, History, Upload } from "lucide-react";
+import { FileText, FolderPlus, History, Trash2, Upload } from "lucide-react";
 import {
   ActionIcon,
   Badge,
@@ -20,12 +20,16 @@ import { notifications } from "@mantine/notifications";
 import {
   useCreateDocument,
   useCreateDossier,
+  useDeleteDocument,
   useDocumentVersions,
   useDocuments,
   useDossiers,
   useNouvelleVersion,
 } from "../../api/documents";
+import { confirmerSuppression } from "../common/confirmerSuppression";
+import { messageErreurApi } from "../../utils/erreurs";
 import { EmptyState } from "../common/EmptyState";
+import type { GedDocument } from "../../types";
 
 function NouveauDossierModal({ projetId, opened, onClose }: { projetId: number; opened: boolean; onClose: () => void }) {
   const createDossier = useCreateDossier();
@@ -58,12 +62,14 @@ function NouveauDossierModal({ projetId, opened, onClose }: { projetId: number; 
 function NouveauDocumentModal({
   projetId,
   activiteId,
+  sousActiviteId,
   dossierId,
   opened,
   onClose,
 }: {
   projetId?: number;
   activiteId?: number;
+  sousActiviteId?: number;
   dossierId: number | null;
   opened: boolean;
   onClose: () => void;
@@ -83,6 +89,7 @@ function NouveauDocumentModal({
     formData.append("type_document", typeDocument);
     if (projetId) formData.append("projet", String(projetId));
     if (activiteId) formData.append("activite", String(activiteId));
+    if (sousActiviteId) formData.append("sous_activite", String(sousActiviteId));
     if (dossierId) formData.append("dossier", String(dossierId));
     formData.append("fichier", fichier);
 
@@ -168,23 +175,63 @@ function VersionsModal({ documentId, opened, onClose }: { documentId: number | n
 }
 
 /**
- * Documents liés à un projet (avec navigation par dossiers) ou directement
- * à une activité (liste simple, sans dossiers — Document.activite est un
- * rattachement indépendant de Document.projet/dossier). Passer l'un OU
- * l'autre des deux identifiants.
+ * Documents liés à un projet (avec navigation par dossiers) ou directement à
+ * une activité ou une sous-activité (liste simple, sans dossiers —
+ * Document.activite/sous_activite sont des rattachements indépendants de
+ * Document.projet/dossier). Passer un seul des trois identifiants.
  */
-export function DocumentsTab({ projetId, activiteId }: { projetId?: number; activiteId?: number }) {
+export function DocumentsTab({
+  projetId,
+  activiteId,
+  sousActiviteId,
+}: {
+  projetId?: number;
+  activiteId?: number;
+  sousActiviteId?: number;
+}) {
   const { data: dossiers } = useDossiers(projetId);
   const [dossierActif, setDossierActif] = useState<string | null>(null);
   const { data: documents, isLoading } = useDocuments({
     projet: projetId,
     activite: activiteId,
+    sous_activite: sousActiviteId,
     dossier: dossierActif ? Number(dossierActif) : undefined,
   });
+  const deleteDocument = useDeleteDocument();
 
   const [modalDossier, setModalDossier] = useState(false);
   const [modalDocument, setModalDocument] = useState(false);
   const [documentVersionsId, setDocumentVersionsId] = useState<number | null>(null);
+
+  // Dans l'onglet "Documents" d'un projet, le filtre `projet` élargi
+  // remonte aussi les documents rattachés à une activité/sous-activité — la
+  // colonne "Rattaché à" permet de distinguer d'où vient chaque ligne dans
+  // cette vue unifiée (inutile quand on est déjà dans le contexte d'une
+  // seule activité/sous-activité précise).
+  const afficherRattachement = projetId !== undefined;
+
+  function rattachementDe(doc: GedDocument) {
+    if (doc.activite_nom) return `Activité — ${doc.activite_nom}`;
+    if (doc.sous_activite_nom) return `Sous-activité — ${doc.sous_activite_nom}`;
+    return "Projet";
+  }
+
+  function handleSupprimer(doc: { id: number; nom: string }) {
+    confirmerSuppression({
+      message: `Supprimer le document "${doc.nom}" ainsi que toutes ses versions ? Cette action est irréversible.`,
+      onConfirm: async () => {
+        try {
+          await deleteDocument.mutateAsync(doc.id);
+          notifications.show({ message: "Document supprimé", color: "green" });
+        } catch (error) {
+          notifications.show({
+            message: messageErreurApi(error, "Erreur lors de la suppression du document"),
+            color: "red",
+          });
+        }
+      },
+    });
+  }
 
   return (
     <Stack gap="md">
@@ -219,7 +266,13 @@ export function DocumentsTab({ projetId, activiteId }: { projetId?: number; acti
         ) : !documents || documents.length === 0 ? (
           <EmptyState
             icon={<FileText size={32} strokeWidth={1.5} />}
-            message={projetId ? "Aucun document dans ce dossier." : "Aucun document lié à cette activité."}
+            message={
+              projetId
+                ? "Aucun document dans ce dossier."
+                : sousActiviteId
+                  ? "Aucun document lié à cette sous-activité."
+                  : "Aucun document lié à cette activité."
+            }
           />
         ) : (
           <Table.ScrollContainer minWidth={600}>
@@ -227,6 +280,7 @@ export function DocumentsTab({ projetId, activiteId }: { projetId?: number; acti
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th tt="uppercase" fz="xs" c="dimmed">Nom</Table.Th>
+                  {afficherRattachement && <Table.Th tt="uppercase" fz="xs" c="dimmed">Rattaché à</Table.Th>}
                   <Table.Th tt="uppercase" fz="xs" c="dimmed">Type</Table.Th>
                   <Table.Th tt="uppercase" fz="xs" c="dimmed">Version</Table.Th>
                   <Table.Th tt="uppercase" fz="xs" c="dimmed">Ajouté par</Table.Th>
@@ -245,17 +299,25 @@ export function DocumentsTab({ projetId, activiteId }: { projetId?: number; acti
                         <Text size="sm" fw={500}>{doc.nom}</Text>
                       )}
                     </Table.Td>
+                    {afficherRattachement && <Table.Td>{rattachementDe(doc)}</Table.Td>}
                     <Table.Td>{doc.type_document || "—"}</Table.Td>
                     <Table.Td>
                       <Badge variant="light" size="sm">v{doc.derniere_version?.version ?? 1} · {doc.nombre_versions} version(s)</Badge>
                     </Table.Td>
                     <Table.Td>{doc.cree_par_nom}</Table.Td>
                     <Table.Td>
-                      <Tooltip label="Historique des versions">
-                        <ActionIcon variant="subtle" onClick={() => setDocumentVersionsId(doc.id)}>
-                          <History size={16} />
-                        </ActionIcon>
-                      </Tooltip>
+                      <Group gap={4} wrap="nowrap">
+                        <Tooltip label="Historique des versions">
+                          <ActionIcon variant="subtle" onClick={() => setDocumentVersionsId(doc.id)}>
+                            <History size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label="Supprimer">
+                          <ActionIcon variant="subtle" color="red" onClick={() => handleSupprimer(doc)}>
+                            <Trash2 size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
                     </Table.Td>
                   </Table.Tr>
                 ))}
@@ -271,6 +333,7 @@ export function DocumentsTab({ projetId, activiteId }: { projetId?: number; acti
       <NouveauDocumentModal
         projetId={projetId}
         activiteId={activiteId}
+        sousActiviteId={sousActiviteId}
         dossierId={dossierActif ? Number(dossierActif) : null}
         opened={modalDocument}
         onClose={() => setModalDocument(false)}

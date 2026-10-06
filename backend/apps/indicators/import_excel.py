@@ -8,6 +8,8 @@ import io
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 
+from apps.core.excel_utils import figer_entete, quadriller
+
 COLONNES = [
     "Libellé",
     "Unité",
@@ -42,6 +44,10 @@ def _remplir_feuille_indicateurs(feuille, avec_colonne_projet: bool = True):
         cellule.font = Font(bold=True)
     ligne_exemple = LIGNE_EXEMPLE if avec_colonne_projet else [v for c, v in zip(COLONNES, LIGNE_EXEMPLE) if c != "Code projet"]
     feuille.append(ligne_exemple)
+    for _ in range(20):
+        feuille.append([""] * len(colonnes))
+    quadriller(feuille, max_col=len(colonnes))
+    figer_entete(feuille)
     return feuille
 
 
@@ -56,9 +62,12 @@ def generer_modele_import_indicateurs(avec_colonne_projet: bool = True) -> bytes
     feuille.title = "Indicateurs"
     _remplir_feuille_indicateurs(feuille, avec_colonne_projet=avec_colonne_projet)
 
-    feuille_paliers = generer_feuille_paliers_alerte(wb, avec_exemple=False)
+    feuille_paliers = generer_feuille_paliers_alerte(wb, avec_exemple=False, avec_lignes_vides=False)
     feuille_paliers.append(["Indicateur", LIGNE_EXEMPLE[0], 0, "Faible", "#d03b3b"])
     feuille_paliers.append(["Indicateur", LIGNE_EXEMPLE[0], 60, "Bon", "#0ca30c"])
+    for _ in range(15):
+        feuille_paliers.append([""] * len(COLONNES_PALIERS))
+    quadriller(feuille_paliers, max_col=len(COLONNES_PALIERS))
 
     instructions = wb.create_sheet("Instructions")
     instructions.append(["Consignes"])
@@ -104,7 +113,7 @@ LIGNES_EXEMPLE_PALIERS = [
 ]
 
 
-def generer_feuille_paliers_alerte(wb, avec_exemple: bool = True):
+def generer_feuille_paliers_alerte(wb, avec_exemple: bool = True, avec_lignes_vides: bool = True):
     """
     Ajoute une feuille « Grilles d'alerte » à un classeur existant — une
     ligne par palier, plusieurs lignes pour une même portée (Portée + Nom
@@ -113,11 +122,17 @@ def generer_feuille_paliers_alerte(wb, avec_exemple: bool = True):
     classeur). Portée « Indicateur »/« Activité » : indique le libellé exact
     d'un indicateur/une activité de ce même classeur (ou déjà existant dans
     le projet, pour un import qui ne fait qu'ajouter des grilles).
+
+    `avec_lignes_vides=False` : à utiliser quand l'appelant ajoute encore des
+    lignes après cet appel (le quadrillage doit alors être fait par
+    l'appelant une fois toutes les lignes ajoutées, sinon les lignes vides
+    pré-remplies se retrouveraient AVANT celles ajoutées ensuite).
     """
     feuille = wb.create_sheet("Grilles d'alerte")
     feuille.append(COLONNES_PALIERS)
     for cellule in feuille[1]:
         cellule.font = Font(bold=True)
+    figer_entete(feuille)
     if avec_exemple:
         for ligne in LIGNES_EXEMPLE_PALIERS:
             feuille.append(ligne)
@@ -126,6 +141,10 @@ def generer_feuille_paliers_alerte(wb, avec_exemple: bool = True):
     feuille.column_dimensions["C"].width = 10
     feuille.column_dimensions["D"].width = 20
     feuille.column_dimensions["E"].width = 28
+    if avec_lignes_vides:
+        for _ in range(15):
+            feuille.append([""] * len(COLONNES_PALIERS))
+        quadriller(feuille, max_col=len(COLONNES_PALIERS))
     return feuille
 
 

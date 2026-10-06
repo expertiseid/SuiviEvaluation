@@ -5,7 +5,7 @@ from .models import Document, DocumentVersion, Dossier, PieceJustificative
 
 @admin.register(PieceJustificative)
 class PieceJustificativeAdmin(admin.ModelAdmin):
-    list_display = ("nom", "type_document", "uploaded_by", "valeur_indicateur", "rapport_suivi", "created_at")
+    list_display = ("nom", "type_document", "uploaded_by", "valeur_indicateur", "created_at")
     list_filter = ("type_document",)
 
 

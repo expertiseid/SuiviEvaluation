@@ -1,13 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
-import type { Beneficiaire, ImportBeneficiairesResultat, Paginated, SignalementDoublon } from "../types";
+import type {
+  Beneficiaire,
+  ImportBeneficiairesResultat,
+  Paginated,
+  ParticipationProjet,
+  SignalementDoublon,
+} from "../types";
 
-export function useBeneficiaires(search?: string) {
+const TAILLE_PAGE_BENEFICIAIRES = 25;
+
+export function useBeneficiaires(search?: string, page = 1) {
   return useQuery({
-    queryKey: ["beneficiaires", search],
+    queryKey: ["beneficiaires", search, page],
     queryFn: async () =>
-      (await apiClient.get<Paginated<Beneficiaire>>("/beneficiaires/", { params: { search } })).data
-        .results,
+      (
+        await apiClient.get<Paginated<Beneficiaire>>("/beneficiaires/", {
+          params: { search, page, page_size: TAILLE_PAGE_BENEFICIAIRES },
+        })
+      ).data,
   });
 }
 
@@ -25,6 +36,60 @@ export function useCreateBeneficiaire() {
     mutationFn: async (payload: Partial<Beneficiaire>) =>
       (await apiClient.post<Beneficiaire>("/beneficiaires/", payload)).data,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["beneficiaires"] }),
+  });
+}
+
+export function useUpdateBeneficiaire() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: Partial<Beneficiaire> }) =>
+      (await apiClient.patch<Beneficiaire>(`/beneficiaires/${id}/`, payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["beneficiaires"] }),
+  });
+}
+
+export function useDeleteBeneficiaire() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/beneficiaires/${id}/`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["beneficiaires"] }),
+  });
+}
+
+export function useParticipations(params: { projet?: number; activite?: number; sous_activite?: number }) {
+  return useQuery({
+    queryKey: ["participations-projet", params],
+    queryFn: async () =>
+      (await apiClient.get<Paginated<ParticipationProjet>>("/participations-projet/", { params })).data
+        .results,
+    enabled: !!(params.projet || params.activite || params.sous_activite),
+  });
+}
+
+export function useCreateParticipation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      beneficiaire: number;
+      projet: number;
+      activite?: number;
+      sous_activite?: number;
+      date_inscription: string;
+      role_dans_projet?: string;
+    }) => (await apiClient.post<ParticipationProjet>("/participations-projet/", payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["participations-projet"] }),
+  });
+}
+
+export function useDeleteParticipation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/participations-projet/${id}/`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["participations-projet"] }),
   });
 }
 

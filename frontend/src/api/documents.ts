@@ -2,13 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
 import type { Dossier, DocumentVersion, GedDocument, Paginated, PieceJustificative } from "../types";
 
-export function usePiecesJustificatives(params: { valeur_indicateur?: number; rapport_suivi?: number }) {
+export function usePiecesJustificatives(params: { valeur_indicateur?: number }) {
   return useQuery({
     queryKey: ["pieces-justificatives", params],
     queryFn: async () =>
       (await apiClient.get<Paginated<PieceJustificative>>("/pieces-justificatives/", { params })).data
         .results,
-    enabled: !!(params.valeur_indicateur || params.rapport_suivi),
+    enabled: !!params.valeur_indicateur,
   });
 }
 
@@ -46,7 +46,13 @@ export function useCreateDossier() {
   });
 }
 
-export function useDocuments(params: { dossier?: number; projet?: number; activite?: number; search?: string }) {
+export function useDocuments(params: {
+  dossier?: number;
+  projet?: number;
+  activite?: number;
+  sous_activite?: number;
+  search?: string;
+}) {
   return useQuery({
     queryKey: ["ged-documents", params],
     queryFn: async () =>
@@ -63,6 +69,16 @@ export function useCreateDocument() {
           headers: { "Content-Type": "multipart/form-data" },
         })
       ).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ged-documents"] }),
+  });
+}
+
+export function useDeleteDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/documents/${id}/`);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ged-documents"] }),
   });
 }

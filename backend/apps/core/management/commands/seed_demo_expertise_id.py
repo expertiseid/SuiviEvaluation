@@ -8,13 +8,12 @@ indicateurs et bénéficiaires.
 Les comptes utilisateurs (accounts_user) et le référentiel géographique
 (geo_zone) ne sont jamais touchés.
 """
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.utils import timezone as dj_timezone
 
 from apps.beneficiaries.models import Beneficiaire, ParticipationProjet, SignalementDoublon, StatutParticulier
 from apps.geo.models import Zone
@@ -24,7 +23,6 @@ from apps.notifications.models import Notification
 from apps.partners.models import Bailleur, Financement, Partenaire
 from apps.projects.models import Activite, Equipe, ObjectifGeneral, ObjectifSpecifique, Projet, SousActivite
 from apps.projects.services import supprimer_projet_cascade
-from apps.reports.models import RapportSuivi
 from apps.strategy.models import CadreStrategique, ElementStrategique, TypeNiveau
 from apps.strategy.services import supprimer_cadre_strategique_cascade
 
@@ -530,25 +528,6 @@ class Command(BaseCommand):
                 role_dans_projet="Bénéficiaire direct — formation agroécologique",
             )
 
-        # Rapport de suivi
-        RapportSuivi.objects.create(
-            projet=projet,
-            periode_debut=date(2025, 1, 1),
-            periode_fin=date(2025, 6, 30),
-            type_rapport=RapportSuivi.TypeRapport.TRIMESTRIEL,
-            redige_par=users["charge_se"] or users["chef_projet"],
-            contenu=(
-                "Au premier semestre 2025, 750 producteurs et productrices ont été formés aux techniques "
-                "agroécologiques (62% de la cible), et 95 hectares ont été aménagés en dispositifs de "
-                "conservation des eaux et des sols. La structuration des organisations paysannes progresse "
-                "plus lentement que prévu (27 sur 30 attendues en fin de programme) : un appui renforcé est "
-                "recommandé sur le second semestre."
-            ),
-            statut=RapportSuivi.Statut.VALIDE,
-            date_validation=dj_timezone.make_aware(datetime(2025, 7, 10)),
-            valide_par=users["coordo"],
-        )
-
     # ------------------------------------------------------------------
     # Projet 2
     # ------------------------------------------------------------------
@@ -816,22 +795,6 @@ class Command(BaseCommand):
                 date_inscription=date(2025, 4, 1),
                 role_dans_projet="Bénéficiaire direct — appui AGR / maraîchage",
             )
-
-        # Rapport de suivi
-        RapportSuivi.objects.create(
-            projet=projet,
-            periode_debut=date(2025, 3, 1),
-            periode_fin=date(2025, 12, 31),
-            type_rapport=RapportSuivi.TypeRapport.TRIMESTRIEL,
-            redige_par=users["charge_se"] or users["coordo"],
-            contenu=(
-                "Sur les dix premiers mois du projet, 900 ménages ont été touchés (26% de la cible finale) "
-                "et 14 hectares de périmètres maraîchers ont été aménagés sur les 50 prévus. Le contexte "
-                "sécuritaire dans le Liptako a retardé le démarrage des activités de médiation foncière, "
-                "reportées au premier trimestre 2026."
-            ),
-            statut=RapportSuivi.Statut.SOUMIS,
-        )
 
     # ------------------------------------------------------------------
     # Helper indicateurs

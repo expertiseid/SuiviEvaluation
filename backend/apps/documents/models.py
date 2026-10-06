@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
 
 from apps.core.models import TimestampedModel
 
@@ -14,29 +13,13 @@ class PieceJustificative(TimestampedModel):
     nom = models.CharField(max_length=200)
     type_document = models.CharField(max_length=100, blank=True)
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="documents_uploades")
-
-    # Rattachement à une seule des deux cibles possibles en MVP — deux FK
-    # nullables (même logique que pour Indicateur). Si un 3e type de
-    # rattachement apparaît, migrer vers un GenericForeignKey à ce moment-là.
     valeur_indicateur = models.ForeignKey(
-        "indicators.ValeurIndicateur", null=True, blank=True, on_delete=models.CASCADE, related_name="pieces_justificatives"
-    )
-    rapport_suivi = models.ForeignKey(
-        "reports.RapportSuivi", null=True, blank=True, on_delete=models.CASCADE, related_name="pieces_justificatives"
+        "indicators.ValeurIndicateur", on_delete=models.CASCADE, related_name="pieces_justificatives"
     )
 
     class Meta:
         verbose_name = "Pièce justificative"
         verbose_name_plural = "Pièces justificatives"
-        constraints = [
-            models.CheckConstraint(
-                check=(
-                    Q(valeur_indicateur__isnull=False, rapport_suivi__isnull=True)
-                    | Q(valeur_indicateur__isnull=True, rapport_suivi__isnull=False)
-                ),
-                name="piece_justificative_rattachement_unique",
-            )
-        ]
 
     def __str__(self):
         return self.nom
@@ -77,6 +60,9 @@ class Document(TimestampedModel):
     )
     activite = models.ForeignKey(
         "projects.Activite", null=True, blank=True, on_delete=models.CASCADE, related_name="documents_ged"
+    )
+    sous_activite = models.ForeignKey(
+        "projects.SousActivite", null=True, blank=True, on_delete=models.CASCADE, related_name="documents_ged"
     )
     type_document = models.CharField(max_length=100, blank=True)
     description = models.TextField(blank=True)

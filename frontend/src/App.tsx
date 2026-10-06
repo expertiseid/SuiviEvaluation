@@ -12,7 +12,6 @@ import { SuiviProjetDashboard } from "./pages/suivi/SuiviProjetDashboard";
 import { BeneficiairesListPage } from "./pages/beneficiaires/BeneficiairesListPage";
 import { BeneficiaireDetailPage } from "./pages/beneficiaires/BeneficiaireDetailPage";
 import { DoublonsPage } from "./pages/beneficiaires/DoublonsPage";
-import { RapportsListPage } from "./pages/rapports/RapportsListPage";
 import { UtilisateursPage } from "./pages/utilisateurs/UtilisateursPage";
 import { CadresStrategiquesListPage } from "./pages/strategie/CadresStrategiquesListPage";
 import { CadreStrategiqueDetailPage } from "./pages/strategie/CadreStrategiqueDetailPage";
@@ -41,7 +40,6 @@ export default function App() {
         <Route path="/beneficiaires" element={<BeneficiairesListPage />} />
         <Route path="/beneficiaires/:id" element={<BeneficiaireDetailPage />} />
         <Route path="/doublons" element={<DoublonsPage />} />
-        <Route path="/rapports" element={<RapportsListPage />} />
         <Route path="/strategie" element={<CadresStrategiquesListPage />} />
         <Route path="/strategie/:id" element={<CadreStrategiqueDetailPage />} />
         <Route path="/zones-administratives" element={<ZonesAdministrativesPage />} />

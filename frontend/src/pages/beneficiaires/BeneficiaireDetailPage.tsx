@@ -1,33 +1,76 @@
-import { Link, useParams } from "react-router-dom";
-import { FolderKanban } from "lucide-react";
-import { Badge, Card, Group, Stack, Table, Text, Title } from "@mantine/core";
-import { useBeneficiaire } from "../../api/beneficiaries";
-import { useStatutsParticuliers } from "../../api/referentiels";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { FolderKanban, Pencil, Trash2 } from "lucide-react";
+import { ActionIcon, Badge, Button, Card, Group, Modal, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useBeneficiaire, useDeleteBeneficiaire } from "../../api/beneficiaries";
+import { useStatutsParticuliers, useTypesActiviteBeneficiaire } from "../../api/referentiels";
 import { EmptyState } from "../../components/common/EmptyState";
+import { confirmerSuppression } from "../../components/common/confirmerSuppression";
+import { messageErreurApi } from "../../utils/erreurs";
 import { PAYS_MONDE } from "../../utils/pays";
+import { BeneficiaireForm } from "./BeneficiaireForm";
 
 export function BeneficiaireDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const beneficiaireId = Number(id);
   const { data: beneficiaire, isLoading } = useBeneficiaire(beneficiaireId);
   const { data: statuts } = useStatutsParticuliers();
+  const { data: typesActivite } = useTypesActiviteBeneficiaire();
+  const deleteBeneficiaire = useDeleteBeneficiaire();
+  const [modalEditionOuvert, setModalEditionOuvert] = useState(false);
 
   if (isLoading || !beneficiaire) return <Text>Chargement…</Text>;
 
   const libellesStatuts = beneficiaire.statuts_particuliers
     .map((sid) => statuts?.find((s) => s.id === sid)?.libelle)
     .filter(Boolean);
+  const libellesTypesActivite = beneficiaire.types_activite
+    .map((tid) => typesActivite?.find((t) => t.id === tid)?.libelle)
+    .filter(Boolean);
+
+  function handleSupprimer() {
+    confirmerSuppression({
+      message: `Supprimer "${beneficiaire!.nom} ${beneficiaire!.prenom}" ? Ses participations aux projets et signalements de doublon associés seront aussi supprimés. Cette action est irréversible.`,
+      onConfirm: async () => {
+        try {
+          await deleteBeneficiaire.mutateAsync(beneficiaireId);
+          notifications.show({ message: "Bénéficiaire supprimé", color: "green" });
+          navigate("/beneficiaires");
+        } catch (error) {
+          notifications.show({
+            message: messageErreurApi(error, "Erreur lors de la suppression du bénéficiaire"),
+            color: "red",
+          });
+        }
+      },
+    });
+  }
 
   return (
     <Stack gap="lg">
-      <div>
-        <Title order={2}>{beneficiaire.nom} {beneficiaire.prenom}</Title>
-        <Text c="dimmed">
-          {beneficiaire.sexe === "F" ? "Féminin" : "Masculin"}
-          {beneficiaire.date_naissance && ` · Né(e) le ${beneficiaire.date_naissance}`}
-          {beneficiaire.telephone && ` · ${beneficiaire.telephone}`}
-        </Text>
-      </div>
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={2}>{beneficiaire.nom} {beneficiaire.prenom}</Title>
+          <Text c="dimmed">
+            {beneficiaire.sexe === "F" ? "Féminin" : "Masculin"}
+            {beneficiaire.date_naissance && ` · Né(e) le ${beneficiaire.date_naissance}`}
+            {beneficiaire.tranche_age && ` · ${beneficiaire.tranche_age}`}
+            {beneficiaire.telephone && ` · ${beneficiaire.telephone}`}
+          </Text>
+        </div>
+        <Group gap="xs">
+          <Button variant="light" leftSection={<Pencil size={15} />} onClick={() => setModalEditionOuvert(true)}>
+            Modifier
+          </Button>
+          <Tooltip label="Supprimer le bénéficiaire">
+            <ActionIcon variant="light" color="red" size="lg" loading={deleteBeneficiaire.isPending} onClick={handleSupprimer}>
+              <Trash2 size={16} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
+      </Group>
 
       <Card withBorder padding="md" radius="md">
         <Text size="xs" c="dimmed" fw={600} tt="uppercase" mb="sm" style={{ letterSpacing: 0.4 }}>
@@ -44,6 +87,13 @@ export function BeneficiaireDetailPage() {
             <Group gap={6} mt={4}>
               {libellesStatuts.map((l) => (
                 <Badge key={l} variant="light" color="grape">{l}</Badge>
+              ))}
+            </Group>
+          )}
+          {libellesTypesActivite.length > 0 && (
+            <Group gap={6} mt={4}>
+              {libellesTypesActivite.map((l) => (
+                <Badge key={l} variant="light" color="teal">{l}</Badge>
               ))}
             </Group>
           )}
@@ -88,6 +138,15 @@ export function BeneficiaireDetailPage() {
           </Table.ScrollContainer>
         )}
       </Card>
+
+      <Modal
+        opened={modalEditionOuvert}
+        onClose={() => setModalEditionOuvert(false)}
+        title={`Modifier — ${beneficiaire.nom} ${beneficiaire.prenom}`}
+        size="lg"
+      >
+        <BeneficiaireForm beneficiaire={beneficiaire} onDone={() => setModalEditionOuvert(false)} />
+      </Modal>
     </Stack>
   );
 }

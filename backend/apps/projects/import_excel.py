@@ -11,6 +11,8 @@ import io
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 
+from apps.core.excel_utils import figer_entete, quadriller
+
 CHAMPS_PROJET = [
     ("Nom du projet", "Programme d'appui à la résilience communautaire"),
     ("Code du projet", "PRJ-2026-001"),
@@ -37,9 +39,9 @@ CHAMPS_PROJET = [
 COLONNES_PLANIFICATION = [
     "Objectif général",
     "Objectif spécifique",
+    "Code activité",
     "Activité",
     "Sous-activité",
-    "Code activité",
     "Valeur de base",
     "Budget alloué (FCFA)",
     "Quantité prévue",
@@ -54,9 +56,9 @@ LIGNES_EXEMPLE_PLANIFICATION = [
     [
         "",
         "",
+        "A1.1",
         "Former les producteurs aux techniques agroécologiques",
         "",
-        "A1.1",
         0,
         2000000,
         300,
@@ -64,7 +66,7 @@ LIGNES_EXEMPLE_PLANIFICATION = [
         "2026-02-01",
         "2026-06-30",
     ],
-    ["", "", "", "Session de formation en zone rurale", "", "", "", 100, "producteurs", "2026-02-01", "2026-03-31"],
+    ["", "", "", "", "Session de formation en zone rurale", "", "", 100, "producteurs", "2026-02-01", "2026-03-31"],
 ]
 
 
@@ -75,6 +77,7 @@ def generer_feuille_projet(wb):
         feuille.append([cle, exemple])
     for ligne in feuille.iter_rows(min_col=1, max_col=1):
         ligne[0].font = Font(bold=True)
+    quadriller(feuille, max_col=2)
     feuille.column_dimensions["A"].width = 42
     feuille.column_dimensions["B"].width = 48
     return feuille
@@ -82,12 +85,28 @@ def generer_feuille_projet(wb):
 
 def generer_feuille_planification(wb, avec_exemple=True):
     feuille = wb.create_sheet("Planification")
+    nb_colonnes = len(COLONNES_PLANIFICATION)
     feuille.append(COLONNES_PLANIFICATION)
     for cellule in feuille[1]:
         cellule.font = Font(bold=True)
     if avec_exemple:
         for ligne in LIGNES_EXEMPLE_PLANIFICATION:
             feuille.append(ligne)
+
+    # Lignes vides supplémentaires déjà quadrillées, pour que la saisie
+    # manuelle qui suit les exemples reste visuellement dans le tableau au
+    # lieu de flotter sans repère de colonnes.
+    lignes_vides_supplementaires = 20
+    for _ in range(lignes_vides_supplementaires):
+        feuille.append([""] * nb_colonnes)
+
+    quadriller(feuille, max_col=nb_colonnes)
+    figer_entete(feuille)
+
+    largeurs = {"A": 34, "B": 34, "C": 14, "D": 40, "E": 34, "F": 14, "G": 16, "H": 14, "I": 14, "J": 16, "K": 16}
+    for colonne, largeur in largeurs.items():
+        feuille.column_dimensions[colonne].width = largeur
+
     return feuille
 
 

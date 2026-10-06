@@ -10,7 +10,6 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission
 from apps.accounts.constants import (
     NIVEAU_ACCES_LECTURE_ECRITURE,
     ROLE_ADMIN,
-    ROLES_VALIDATION_RAPPORT,
     ROLES_VISIBILITE_GLOBALE,
 )
 
@@ -77,18 +76,6 @@ class HasGlobalVisibilityOrAssigned(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return peut_modifier(request.user)
-
-
-class CanValidateReport(BasePermission):
-    """Rôles habilités à faire passer un rapport de SOUMIS à VALIDE (et ayant le droit d'écriture)."""
-
-    def has_permission(self, request, view):
-        return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.role in ROLES_VALIDATION_RAPPORT
-            and peut_modifier(request.user)
-        )
 
 
 def has_global_visibility(user) -> bool:

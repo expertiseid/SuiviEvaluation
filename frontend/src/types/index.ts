@@ -337,11 +337,22 @@ export interface StatutParticulier {
   libelle: string;
 }
 
+export interface TypeActiviteBeneficiaire {
+  id: number;
+  code: string;
+  libelle: string;
+}
+
 export interface ParticipationProjet {
   id: number;
   beneficiaire: number;
+  beneficiaire_nom: string;
   projet: number;
   projet_nom: string;
+  activite: number | null;
+  activite_nom: string | null;
+  sous_activite: number | null;
+  sous_activite_nom: string | null;
   date_inscription: string;
   role_dans_projet: string;
 }
@@ -352,6 +363,8 @@ export interface Beneficiaire {
   prenom: string;
   sexe: "F" | "M";
   date_naissance: string | null;
+  age: number | null;
+  tranche_age: string | null;
   telephone: string;
   numero_piece_identite: string;
   type_piece: string;
@@ -359,6 +372,7 @@ export interface Beneficiaire {
   zone: number | null;
   zone_nom: string | null;
   statuts_particuliers: number[];
+  types_activite: number[];
   participations: ParticipationProjet[];
 }
 
@@ -423,29 +437,6 @@ export interface SignalementDoublon {
   date_traitement: string | null;
 }
 
-export type StatutRapport = "BROUILLON" | "SOUMIS" | "VALIDE";
-
-export interface RapportSuivi {
-  id: number;
-  projet: number;
-  projet_nom: string;
-  periode_debut: string;
-  periode_fin: string;
-  type_rapport: "MENSUEL" | "TRIMESTRIEL" | "AUTRE";
-  redige_par: number;
-  redige_par_nom: string;
-  contenu: string;
-  statut: StatutRapport;
-  date_validation: string | null;
-  valide_par: number | null;
-  valide_par_nom: string | null;
-  taux_execution_physique_global: number | null;
-  taux_execution_financiere_global: number | null;
-  statut_global: "ATTEINT" | "EN_RETARD" | "EN_COURS";
-  statistiques_zones: Record<string, number>;
-  statistiques_beneficiaires: { nombre_beneficiaires_uniques: number; doublons_detectes: number };
-}
-
 export interface PieceJustificative {
   id: number;
   fichier: string;
@@ -454,7 +445,6 @@ export interface PieceJustificative {
   uploaded_by: number;
   uploaded_by_nom: string;
   valeur_indicateur: number | null;
-  rapport_suivi: number | null;
   created_at: string;
 }
 
@@ -503,6 +493,9 @@ export interface GedDocument {
   dossier: number | null;
   projet: number | null;
   activite: number | null;
+  activite_nom: string | null;
+  sous_activite: number | null;
+  sous_activite_nom: string | null;
   type_document: string;
   description: string;
   cree_par: number;

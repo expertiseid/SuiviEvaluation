@@ -16,19 +16,9 @@ class PieceJustificativeSerializer(serializers.ModelSerializer):
             "uploaded_by",
             "uploaded_by_nom",
             "valeur_indicateur",
-            "rapport_suivi",
             "created_at",
         )
         read_only_fields = ("uploaded_by", "created_at")
-
-    def validate(self, attrs):
-        valeur_indicateur = attrs.get("valeur_indicateur", getattr(self.instance, "valeur_indicateur", None))
-        rapport_suivi = attrs.get("rapport_suivi", getattr(self.instance, "rapport_suivi", None))
-        if bool(valeur_indicateur) == bool(rapport_suivi):
-            raise serializers.ValidationError(
-                "Une pièce justificative doit être rattachée à exactement une Valeur d'indicateur OU un Rapport de suivi."
-            )
-        return attrs
 
     def create(self, validated_data):
         validated_data["uploaded_by"] = self.context["request"].user
@@ -59,6 +49,8 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
 
 class DocumentSerializer(serializers.ModelSerializer):
     cree_par_nom = serializers.StringRelatedField(source="cree_par", read_only=True)
+    activite_nom = serializers.StringRelatedField(source="activite", read_only=True)
+    sous_activite_nom = serializers.StringRelatedField(source="sous_activite", read_only=True)
     derniere_version = DocumentVersionSerializer(read_only=True)
     nombre_versions = serializers.IntegerField(source="versions.count", read_only=True)
 
@@ -70,6 +62,9 @@ class DocumentSerializer(serializers.ModelSerializer):
             "dossier",
             "projet",
             "activite",
+            "activite_nom",
+            "sous_activite",
+            "sous_activite_nom",
             "type_document",
             "description",
             "cree_par",

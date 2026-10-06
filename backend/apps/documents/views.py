@@ -1,3 +1,5 @@
+import django_filters
+from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -16,12 +18,35 @@ from .serializers import (
 )
 
 
+class DocumentFilter(django_filters.FilterSet):
+    """
+    `projet=<id>` élargi : retrouve aussi les documents rattachés à une
+    activité ou une sous-activité de ce projet, pas seulement ceux rattachés
+    directement au projet — pour que l'onglet « Documents » d'un projet
+    centralise tout ce qui le concerne, quel que soit le niveau auquel un
+    document a été ajouté.
+    """
+
+    projet = django_filters.NumberFilter(method="filtrer_projet")
+
+    class Meta:
+        model = Document
+        fields = ["dossier", "projet", "activite", "sous_activite", "type_document"]
+
+    def filtrer_projet(self, queryset, name, value):
+        return queryset.filter(
+            Q(projet_id=value)
+            | Q(activite__objectif_specifique__objectif_general__projet_id=value)
+            | Q(sous_activite__activite__objectif_specifique__objectif_general__projet_id=value)
+        )
+
+
 class PieceJustificativeViewSet(viewsets.ModelViewSet):
     queryset = PieceJustificative.objects.select_related("uploaded_by")
     serializer_class = PieceJustificativeSerializer
     permission_classes = (HasGlobalVisibilityOrAssigned,)
     parser_classes = (MultiPartParser, FormParser)
-    filterset_fields = ("valeur_indicateur", "rapport_suivi", "type_document")
+    filterset_fields = ("valeur_indicateur", "type_document")
 
 
 class DossierViewSet(viewsets.ModelViewSet):
@@ -40,15 +65,17 @@ class DocumentViewSet(viewsets.ModelViewSet):
     serializer_class = DocumentSerializer
     permission_classes = (HasGlobalVisibilityOrAssigned,)
     parser_classes = (MultiPartParser, FormParser)
-    filterset_fields = ("dossier", "projet", "activite", "type_document")
+    filterset_class = DocumentFilter
     search_fields = ("nom", "description")
 
     def get_queryset(self):
         ids = visible_projets_ids(self.request.user)
-        from django.db.models import Q
 
         return Document.objects.select_related("cree_par").prefetch_related("versions").filter(
-            Q(projet__isnull=True) | Q(projet__id__in=ids)
+            Q(projet__isnull=True, activite__isnull=True, sous_activite__isnull=True)
+            | Q(projet__id__in=ids)
+            | Q(activite__objectif_specifique__objectif_general__projet__id__in=ids)
+            | Q(sous_activite__activite__objectif_specifique__objectif_general__projet__id__in=ids)
         )
 
     def create(self, request, *args, **kwargs):

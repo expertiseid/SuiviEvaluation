@@ -7,6 +7,9 @@ import datetime
 import io
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font
+
+from apps.core.excel_utils import figer_entete, quadriller
 
 COLONNES = [
     "Nom",
@@ -21,6 +24,7 @@ COLONNES = [
     "Province",
     "Commune / Village",
     "Statuts particuliers (séparés par ;)",
+    "Types d'activité menée (séparés par ;)",
 ]
 
 
@@ -29,6 +33,8 @@ def generer_modele_import() -> bytes:
     feuille = wb.active
     feuille.title = "Bénéficiaires"
     feuille.append(COLONNES)
+    for cellule in feuille[1]:
+        cellule.font = Font(bold=True)
     feuille.append(
         [
             "Traoré",
@@ -43,8 +49,13 @@ def generer_modele_import() -> bytes:
             "Kadiogo",
             "Koubri",
             "Femme;Jeune",
+            "Maraîchage",
         ]
     )
+    for _ in range(20):
+        feuille.append([""] * len(COLONNES))
+    quadriller(feuille, max_col=len(COLONNES))
+    figer_entete(feuille)
 
     instructions = wb.create_sheet("Instructions")
     instructions.append(["Consignes"])
@@ -58,6 +69,10 @@ def generer_modele_import() -> bytes:
     ])
     instructions.append(["- Commune / Village : texte libre, créé automatiquement s'il n'existe pas encore."])
     instructions.append(["- Plusieurs statuts particuliers : séparer par un point-virgule (ex : Femme;Jeune)."])
+    instructions.append([
+        "- Types d'activité menée (ex : Maraîchage, Élevage) : séparer par un point-virgule — un type inconnu "
+        "est ignoré (avertissement), il doit d'abord être créé (fiche bénéficiaire ou admin)."
+    ])
     instructions.append(["- Les doublons potentiels seront signalés automatiquement après l'import."])
 
     buffer = io.BytesIO()
@@ -148,6 +163,26 @@ def _resoudre_statuts(valeur):
     return trouves, inconnus
 
 
+def _resoudre_types_activite(valeur):
+    from ..models import TypeActiviteBeneficiaire
+
+    if not valeur:
+        return [], []
+
+    noms = [n.strip() for n in str(valeur).split(";") if n.strip()]
+    trouves = []
+    inconnus = []
+    for nom in noms:
+        type_activite = TypeActiviteBeneficiaire.objects.filter(
+            libelle__iexact=nom
+        ).first() or TypeActiviteBeneficiaire.objects.filter(code__iexact=nom).first()
+        if type_activite:
+            trouves.append(type_activite)
+        else:
+            inconnus.append(nom)
+    return trouves, inconnus
+
+
 def importer_beneficiaires(fichier, utilisateur, projet=None) -> dict:
     wb = load_workbook(fichier, data_only=True)
     feuille = wb["Bénéficiaires"] if "Bénéficiaires" in wb.sheetnames else wb.worksheets[0]
@@ -204,6 +239,10 @@ def importer_beneficiaires_depuis_feuille(feuille, utilisateur, projet=None) -> 
         for nom_inconnu in inconnus:
             avertissements.append({"ligne": numero, "message": f"Statut particulier inconnu ignoré : « {nom_inconnu} »."})
 
+        types_activite, types_inconnus = _resoudre_types_activite(valeur(ligne, "Types d'activité menée (séparés par ;)"))
+        for nom_inconnu in types_inconnus:
+            avertissements.append({"ligne": numero, "message": f"Type d'activité inconnu ignoré : « {nom_inconnu} »."})
+
         beneficiaire = Beneficiaire.objects.create(
             nom=str(nom).strip(),
             prenom=str(prenom).strip(),
@@ -217,6 +256,8 @@ def importer_beneficiaires_depuis_feuille(feuille, utilisateur, projet=None) -> 
         )
         if statuts:
             beneficiaire.statuts_particuliers.set(statuts)
+        if types_activite:
+            beneficiaire.types_activite.set(types_activite)
 
         if projet is not None:
             from ..models import ParticipationProjet

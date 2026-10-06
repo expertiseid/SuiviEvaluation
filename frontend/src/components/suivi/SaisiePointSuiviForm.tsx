@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { Button, Group, NumberInput, Select, Stack, Text, Textarea } from "@mantine/core";
+import { Button, Divider, Group, NumberInput, Select, Stack, Text, Textarea } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
 import { useCreatePointSuivi, useUpdatePointSuivi } from "../../api/suivi";
+import { DocumentsTab } from "../documents/DocumentsTab";
 import { messageErreurApi } from "../../utils/erreurs";
 import type { SuiviHistoriquePoint } from "../../types";
 
@@ -106,6 +107,13 @@ export function SaisiePointSuiviForm({
           {enEdition ? "Enregistrer les modifications" : "Enregistrer"}
         </Button>
       </Group>
+
+      {activiteId !== undefined && (
+        <>
+          <Divider label="Documents liés à cette activité" labelPosition="left" mt="sm" />
+          <DocumentsTab activiteId={activiteId} />
+        </>
+      )}
     </Stack>
   );
 }

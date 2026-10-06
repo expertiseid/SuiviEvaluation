@@ -30,7 +30,7 @@ export function ProjetsListPage() {
 
   function handleSupprimer(id: number, nom: string) {
     confirmerSuppression({
-      message: `Supprimer le projet "${nom}" ainsi que toute sa planification, ses indicateurs et ses rapports ? Cette action est irréversible.`,
+      message: `Supprimer le projet "${nom}" ainsi que toute sa planification et ses indicateurs ? Cette action est irréversible.`,
       onConfirm: async () => {
         try {
           await deleteProjet.mutateAsync(id);

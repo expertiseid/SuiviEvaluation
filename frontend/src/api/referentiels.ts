@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
-import type { Bailleur, Financement, Paginated, Partenaire, StatutParticulier } from "../types";
+import type { Bailleur, Financement, Paginated, Partenaire, StatutParticulier, TypeActiviteBeneficiaire } from "../types";
 
 export function usePartenaires() {
   return useQuery({
@@ -14,6 +14,32 @@ export function useStatutsParticuliers() {
     queryKey: ["statuts-particuliers"],
     queryFn: async () =>
       (await apiClient.get<Paginated<StatutParticulier>>("/statuts-particuliers/")).data.results,
+  });
+}
+
+export function useCreateStatutParticulier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { code: string; libelle: string }) =>
+      (await apiClient.post<StatutParticulier>("/statuts-particuliers/", payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["statuts-particuliers"] }),
+  });
+}
+
+export function useTypesActiviteBeneficiaire() {
+  return useQuery({
+    queryKey: ["types-activite-beneficiaire"],
+    queryFn: async () =>
+      (await apiClient.get<Paginated<TypeActiviteBeneficiaire>>("/types-activite-beneficiaire/")).data.results,
+  });
+}
+
+export function useCreateTypeActiviteBeneficiaire() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { code: string; libelle: string }) =>
+      (await apiClient.post<TypeActiviteBeneficiaire>("/types-activite-beneficiaire/", payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["types-activite-beneficiaire"] }),
   });
 }
 
@@ -59,6 +85,13 @@ export function useCreateFinancement() {
   return useMutation({
     mutationFn: async (payload: { projet: number; bailleur: number; montant_finance: number }) =>
       (await apiClient.post<Financement>("/financements/", payload)).data,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["financements"] }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["financements"] });
+      // Le coût total du projet (budget_total) est recalculé côté backend à
+      // chaque financement ajouté — il faut aussi invalidate le projet
+      // lui-même, sinon la carte "Coût total" reste figée sur sa valeur
+      // mise en cache tant qu'on ne quitte pas/revient pas sur la page.
+      queryClient.invalidateQueries({ queryKey: ["projets", variables.projet] });
+    },
   });
 }

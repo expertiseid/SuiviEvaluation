@@ -1,5 +1,7 @@
+from django.db.models import ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -30,3 +32,16 @@ class UserViewSet(viewsets.ModelViewSet):
     def me(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
+    def perform_destroy(self, instance):
+        if instance == self.request.user:
+            raise ValidationError({"detail": "Impossible de supprimer ton propre compte."})
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise ValidationError(
+                {
+                    "detail": "Impossible de supprimer cet utilisateur : il a déjà des données rattachées "
+                    "(valeurs saisies, documents, points de suivi...). Désactive-le plutôt (Actif = Non)."
+                }
+            )

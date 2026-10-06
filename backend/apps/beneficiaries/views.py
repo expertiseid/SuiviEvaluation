@@ -11,13 +11,15 @@ from apps.core.permissions import HasGlobalVisibilityOrAssigned
 from apps.notifications.models import Notification
 from apps.notifications.services import notifier_par_role
 
-from .models import Beneficiaire, ParticipationProjet, SignalementDoublon, StatutParticulier
+from .models import Beneficiaire, ParticipationProjet, SignalementDoublon, StatutParticulier, TypeActiviteBeneficiaire
 from .serializers import (
     BeneficiaireSerializer,
     ParticipationProjetSerializer,
     SignalementDoublonSerializer,
     StatutParticulierSerializer,
+    TypeActiviteBeneficiaireSerializer,
 )
+from .services.deletion import supprimer_beneficiaire_cascade
 from .services.duplicate_detection import rechercher_doublons
 from .services.import_excel import generer_modele_import, importer_beneficiaires
 
@@ -25,6 +27,12 @@ from .services.import_excel import generer_modele_import, importer_beneficiaires
 class StatutParticulierViewSet(viewsets.ModelViewSet):
     queryset = StatutParticulier.objects.all()
     serializer_class = StatutParticulierSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+
+
+class TypeActiviteBeneficiaireViewSet(viewsets.ModelViewSet):
+    queryset = TypeActiviteBeneficiaire.objects.all()
+    serializer_class = TypeActiviteBeneficiaireSerializer
     permission_classes = (HasGlobalVisibilityOrAssigned,)
 
 
@@ -36,6 +44,9 @@ class BeneficiaireViewSet(viewsets.ModelViewSet):
     permission_classes = (HasGlobalVisibilityOrAssigned,)
     filterset_fields = ("sexe", "zone", "statuts_particuliers")
     search_fields = ("nom", "prenom", "telephone", "numero_piece_identite")
+
+    def perform_destroy(self, instance):
+        supprimer_beneficiaire_cascade(instance)
 
     @action(detail=False, methods=["get"], url_path="modele-import")
     def modele_import(self, request):
@@ -92,7 +103,7 @@ class BeneficiaireViewSet(viewsets.ModelViewSet):
 class ParticipationProjetViewSet(viewsets.ModelViewSet):
     serializer_class = ParticipationProjetSerializer
     permission_classes = (HasGlobalVisibilityOrAssigned,)
-    filterset_fields = ("beneficiaire", "projet")
+    filterset_fields = ("beneficiaire", "projet", "activite", "sous_activite")
 
     def get_queryset(self):
         from apps.projects.queryset_filters import visible_projets_ids

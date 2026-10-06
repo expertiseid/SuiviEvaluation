@@ -25,7 +25,6 @@ from apps.indicators.models import Indicateur, ValeurIndicateur
 from apps.intervenants.models import Intervenant
 from apps.partners.models import Bailleur, Financement, Partenaire
 from apps.projects.models import Activite, ObjectifGeneral, ObjectifSpecifique, Projet, SousActivite
-from apps.reports.models import RapportSuivi
 from apps.strategy.models import CadreStrategique, ElementStrategique, TypeNiveau
 from apps.suivi.models import PointSuivi
 from apps.suivi.services import synchroniser_activite_depuis_suivi, synchroniser_sous_activite_depuis_suivi
@@ -383,13 +382,6 @@ class Command(BaseCommand):
             projet, [("SOME", "Adama"), ("OUATTARA", "Rasmata")], date(2026, 2, 10), "Bénéficiaire — session d'alphabétisation"
         )
 
-        RapportSuivi.objects.create(
-            projet=projet, periode_debut=date(2026, 1, 15), periode_fin=date(2026, 6, 30),
-            type_rapport=RapportSuivi.TypeRapport.TRIMESTRIEL, redige_par=self.users["charge_se"],
-            contenu="Sur le premier semestre, 1 050 bénéficiaires ont été touchés et 420 enfants inscrits dans les centres d'éducation alternative. Le démarrage de la réhabilitation des salles de classe a pris un léger retard lié aux appels d'offres.",
-            statut=RapportSuivi.Statut.SOUMIS,
-        )
-
     # ------------------------------------------------------------------
     # Projet 2 — Santé maternelle et infantile
     # ------------------------------------------------------------------
@@ -549,13 +541,6 @@ class Command(BaseCommand):
             projet, [("YAMEOGO", "Salamata")], date(2026, 2, 20), "Bénéficiaire — suivi nutritionnel"
         )
 
-        RapportSuivi.objects.create(
-            projet=projet, periode_debut=date(2026, 2, 1), periode_fin=date(2026, 6, 30),
-            type_rapport=RapportSuivi.TypeRapport.TRIMESTRIEL, redige_par=self.users["charge_se"],
-            contenu="1 900 femmes et enfants touchés sur le premier semestre. La formation des agents de santé communautaire progresse bien (150/180) ; la dotation en kits accuse un léger retard lié aux délais d'approvisionnement.",
-            statut=RapportSuivi.Statut.VALIDE,
-        )
-
     # ------------------------------------------------------------------
     # Projet 3 — Eau, hygiène et assainissement
     # ------------------------------------------------------------------
@@ -713,13 +698,6 @@ class Command(BaseCommand):
             projet, [("NANA", "Issa"), ("TOURE", "Hamidou")], date(2026, 3, 20), "Bénéficiaire — comité de gestion de point d'eau"
         )
 
-        RapportSuivi.objects.create(
-            projet=projet, periode_debut=date(2026, 3, 1), periode_fin=date(2026, 6, 30),
-            type_rapport=RapportSuivi.TypeRapport.TRIMESTRIEL, redige_par=self.users["animateur"] or self.users["charge_se"],
-            contenu="12 forages réalisés sur 70 prévus et 58 villages déclenchés en ATPC. Le contexte sécuritaire dans le Soum ralentit l'accès à certains sites identifiés pour la réalisation de forages.",
-            statut=RapportSuivi.Statut.SOUMIS,
-        )
-
     # ------------------------------------------------------------------
     # Projet 4 — Autonomisation économique des femmes et des jeunes
     # ------------------------------------------------------------------
@@ -875,11 +853,4 @@ class Command(BaseCommand):
         )
         self.rattacher_beneficiaires_existants(
             projet, [("Kaboré", "Issa"), ("Traoré", "Awa")], date(2026, 1, 25), "Bénéficiaire — groupement d'épargne"
-        )
-
-        RapportSuivi.objects.create(
-            projet=projet, periode_debut=date(2026, 1, 1), periode_fin=date(2026, 6, 30),
-            type_rapport=RapportSuivi.TypeRapport.TRIMESTRIEL, redige_par=self.users["chef_service"] or self.users["charge_se"],
-            contenu="780 femmes et jeunes touchés au premier semestre, 610 personnes déjà formées aux métiers porteurs (68% de la cible annuelle atteinte dès le mois d'août). Les subventions de démarrage aux micro-entreprises progressent conformément au calendrier.",
-            statut=RapportSuivi.Statut.VALIDE,
         )
