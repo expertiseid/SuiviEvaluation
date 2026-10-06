@@ -25,6 +25,7 @@ COLONNES = [
     "Commune / Village",
     "Statuts particuliers (séparés par ;)",
     "Types d'activité menée (séparés par ;)",
+    "Code projet",
 ]
 
 
@@ -50,6 +51,7 @@ def generer_modele_import() -> bytes:
             "Koubri",
             "Femme;Jeune",
             "Maraîchage",
+            "",
         ]
     )
     for _ in range(20):
@@ -74,6 +76,11 @@ def generer_modele_import() -> bytes:
         "est ignoré (avertissement), il doit d'abord être créé (fiche bénéficiaire ou admin)."
     ])
     instructions.append(["- Les doublons potentiels seront signalés automatiquement après l'import."])
+    instructions.append([
+        "- Code projet (facultatif) : code exact d'un projet déjà créé sur la plateforme — le bénéficiaire "
+        "est alors automatiquement inscrit à ce projet (participation datée du jour de l'import). Laisser "
+        "vide si le bénéficiaire ne doit être rattaché à aucun projet pour l'instant."
+    ])
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -183,6 +190,14 @@ def _resoudre_types_activite(valeur):
     return trouves, inconnus
 
 
+def _resoudre_projet(code):
+    from apps.projects.models import Projet
+
+    if not code:
+        return None
+    return Projet.objects.filter(code__iexact=str(code).strip()).first()
+
+
 def importer_beneficiaires(fichier, utilisateur, projet=None) -> dict:
     wb = load_workbook(fichier, data_only=True)
     feuille = wb["Bénéficiaires"] if "Bénéficiaires" in wb.sheetnames else wb.worksheets[0]
@@ -259,11 +274,17 @@ def importer_beneficiaires_depuis_feuille(feuille, utilisateur, projet=None) -> 
         if types_activite:
             beneficiaire.types_activite.set(types_activite)
 
-        if projet is not None:
+        code_projet = valeur(ligne, "Code projet")
+        projet_ligne = _resoudre_projet(code_projet) if code_projet else None
+        if code_projet and projet_ligne is None:
+            avertissements.append({"ligne": numero, "message": f"Code projet inconnu ignoré : « {code_projet} »."})
+
+        projet_a_rattacher = projet_ligne or projet
+        if projet_a_rattacher is not None:
             from ..models import ParticipationProjet
 
             ParticipationProjet.objects.create(
-                beneficiaire=beneficiaire, projet=projet, date_inscription=datetime.date.today()
+                beneficiaire=beneficiaire, projet=projet_a_rattacher, date_inscription=datetime.date.today()
             )
 
         for resultat in rechercher_doublons(beneficiaire):

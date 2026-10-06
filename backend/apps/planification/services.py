@@ -75,10 +75,10 @@ def generer_modele_import_complet() -> bytes:
     for cellule in feuille_benef[1]:
         cellule.font = Font(bold=True)
     feuille_benef.append(
-        ["Traoré", "Awa", "F", "1990-05-12", "70000001", "CNIB123456", "CNIB", "BF", "Kadiogo", "Kadiogo", "Koubri", "", ""]
+        ["Traoré", "Awa", "F", "1990-05-12", "70000001", "CNIB123456", "CNIB", "BF", "Kadiogo", "Kadiogo", "Koubri", "", "", ""]
     )
     feuille_benef.append(
-        ["Kaboré", "Issa", "M", "1985-11-03", "70000002", "CNIB654321", "CNIB", "BF", "Kadiogo", "Kadiogo", "Koubri", "", ""]
+        ["Kaboré", "Issa", "M", "1985-11-03", "70000002", "CNIB654321", "CNIB", "BF", "Kadiogo", "Kadiogo", "Koubri", "", "", ""]
     )
     for _ in range(15):
         feuille_benef.append([""] * len(COLONNES_BENEFICIAIRES))
