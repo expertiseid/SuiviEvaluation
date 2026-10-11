@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Check, Download, MapPin, Paperclip, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
+import { CalendarRange, Check, Download, FolderTree, MapPin, Paperclip, Pencil, Plus, Search, Trash2, Users, X } from "lucide-react";
 import {
   ActionIcon,
   Badge,
@@ -29,6 +29,7 @@ import {
   useDeleteActivite,
   useDeleteSousActivite,
   useDeleteProjet,
+  useNiveauxActivite,
   telechargerExportProjet,
 } from "../../api/projects";
 import { useDashboardProjet } from "../../api/dashboard";
@@ -38,8 +39,10 @@ import { confirmerSuppression } from "../../components/common/confirmerSuppressi
 import { HistoriqueModification } from "../../components/audit/HistoriqueModification";
 import { DocumentsTab } from "../../components/documents/DocumentsTab";
 import { BeneficiairesTab } from "../../components/beneficiaires/BeneficiairesTab";
+import { TranchesPlanifieesTab } from "../../components/suivi/TranchesPlanifieesTab";
 import { BoutonModeEdition } from "../../components/common/BoutonModeEdition";
 import { ActiviteForm } from "./ActiviteForm";
+import { NiveauxActiviteTab } from "./NiveauxActiviteTab";
 import { SousActiviteForm } from "./SousActiviteForm";
 import { FinancementsTab } from "./FinancementsTab";
 import { EquipeTab } from "./EquipeTab";
@@ -47,7 +50,7 @@ import { ProjetForm } from "./ProjetForm";
 import { TauxParIndicateurChart } from "../../components/charts/TauxParIndicateurChart";
 import { PAYS_MONDE } from "../../utils/pays";
 import { correspond } from "../../utils/recherche";
-import type { Activite } from "../../types";
+import type { Activite, SousActivite } from "../../types";
 
 function LibelleEditable({
   valeur,
@@ -148,12 +151,210 @@ function AjoutInline({ placeholder, onAdd }: { placeholder: string; onAdd: (libe
   );
 }
 
+// Une activité peut être imbriquée sous une autre (Activite.activite_parent),
+// profondeur illimitée — ce composant s'affiche donc lui-même pour chaque
+// enfant. Le nom affiché par profondeur (« Résultat », « Activité »...) vient
+// de niveauxNoms, construit depuis NiveauActivite (ou "Activité" par défaut).
+function CarteActivite({
+  act,
+  profondeur,
+  editionActive,
+  niveauxNoms,
+  utiliseNiveauxPersonnalises,
+  onDocuments,
+  onBeneficiaires,
+  onTranche,
+  onEditer,
+  onAjouterEnfant,
+  onAjouterSousActivite,
+  onSupprimer,
+  onDocumentsSousActivite,
+  onBeneficiairesSousActivite,
+  onSupprimerSousActivite,
+}: {
+  act: Activite;
+  profondeur: number;
+  editionActive: boolean;
+  niveauxNoms: Record<number, string>;
+  /** Ce projet a-t-il au moins un niveau d'activité personnalisé (voir NiveauActivite) ? */
+  utiliseNiveauxPersonnalises: boolean;
+  onDocuments: (id: number) => void;
+  onBeneficiaires: (id: number) => void;
+  onTranche: (act: Activite) => void;
+  onEditer: (act: Activite) => void;
+  onAjouterEnfant: (act: Activite) => void;
+  onAjouterSousActivite: (id: number) => void;
+  onSupprimer: (act: Activite) => void;
+  onDocumentsSousActivite: (id: number) => void;
+  onBeneficiairesSousActivite: (id: number) => void;
+  onSupprimerSousActivite: (sa: SousActivite) => void;
+}) {
+  const nomNiveau = niveauxNoms[profondeur] ?? "Activité";
+  // Le "+" ajoute un niveau imbriqué de plus (nommé d'après le niveau
+  // configuré suivant, ou "Nouveau niveau" si aucun n'est encore nommé à
+  // cette profondeur) dès que ce projet utilise des niveaux personnalisés —
+  // sinon (projet "classique", jamais personnalisé) il garde le comportement
+  // d'avant : créer une vraie Sous-activité.
+  const nomNiveauSuivant = niveauxNoms[profondeur + 1];
+  const ajouterUnNiveau = utiliseNiveauxPersonnalises || !!nomNiveauSuivant;
+
+  return (
+    <Card withBorder radius="sm" padding="xs" bg="gray.0" style={{ borderLeft: "3px solid var(--mantine-color-grape-5)" }}>
+      <Group justify="space-between" align="flex-start" wrap="wrap">
+        <div>
+          <Group gap={6} wrap="wrap">
+            <Badge color="grape" variant="light" size="xs">{nomNiveau}</Badge>
+            {act.code_activite && <Text size="xs" c="dimmed">{act.code_activite}</Text>}
+            <Text size="sm" fw={500}>{act.libelle}</Text>
+          </Group>
+          {(act.date_debut || act.date_fin) && (
+            <Text size="xs" c="dimmed" mt={2}>
+              {act.date_debut ?? "?"} → {act.date_fin ?? "?"}
+            </Text>
+          )}
+          {act.commentaire && (
+            <Text size="xs" c="dimmed" fs="italic" mt={2}>
+              {act.commentaire}
+            </Text>
+          )}
+        </div>
+        <Group gap={4} wrap="nowrap">
+          <Tooltip label="Documents liés">
+            <ActionIcon size="sm" variant="subtle" onClick={() => onDocuments(act.id)}>
+              <Paperclip size={12} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Bénéficiaires liés">
+            <ActionIcon size="sm" variant="subtle" onClick={() => onBeneficiaires(act.id)}>
+              <Users size={12} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Suivi détaillé par période">
+            <ActionIcon size="sm" variant="subtle" onClick={() => onTranche(act)}>
+              <CalendarRange size={12} />
+            </ActionIcon>
+          </Tooltip>
+          {editionActive && (
+            <Tooltip label="Modifier l'activité">
+              <ActionIcon size="sm" variant="subtle" onClick={() => onEditer(act)}>
+                <Pencil size={12} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          <Tooltip
+            label={
+              ajouterUnNiveau
+                ? nomNiveauSuivant
+                  ? `Nouveau « ${nomNiveauSuivant} »`
+                  : "Nouveau niveau"
+                : "Nouvelle sous-activité"
+            }
+          >
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              onClick={() => (ajouterUnNiveau ? onAjouterEnfant(act) : onAjouterSousActivite(act.id))}
+            >
+              <Plus size={14} />
+            </ActionIcon>
+          </Tooltip>
+          {!ajouterUnNiveau && (
+            <Tooltip label="Ajouter un niveau imbriqué sous un autre nom (plutôt qu'une sous-activité classique)">
+              <ActionIcon size="sm" variant="subtle" onClick={() => onAjouterEnfant(act)}>
+                <FolderTree size={14} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          {editionActive && (
+            <Tooltip label="Supprimer l'activité">
+              <ActionIcon size="sm" variant="subtle" color="red" onClick={() => onSupprimer(act)}>
+                <Trash2 size={12} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+        </Group>
+      </Group>
+
+      {act.enfants.length > 0 && (
+        <Stack mt={6} gap={6} pl="md">
+          {act.enfants.map((enfant) => (
+            <CarteActivite
+              key={enfant.id}
+              act={enfant}
+              profondeur={profondeur + 1}
+              editionActive={editionActive}
+              niveauxNoms={niveauxNoms}
+              utiliseNiveauxPersonnalises={utiliseNiveauxPersonnalises}
+              onDocuments={onDocuments}
+              onBeneficiaires={onBeneficiaires}
+              onTranche={onTranche}
+              onEditer={onEditer}
+              onAjouterEnfant={onAjouterEnfant}
+              onAjouterSousActivite={onAjouterSousActivite}
+              onSupprimer={onSupprimer}
+              onDocumentsSousActivite={onDocumentsSousActivite}
+              onBeneficiairesSousActivite={onBeneficiairesSousActivite}
+              onSupprimerSousActivite={onSupprimerSousActivite}
+            />
+          ))}
+        </Stack>
+      )}
+
+      {act.sous_activites.length > 0 && (
+        <Stack mt={6} gap={6} pl="md">
+          {act.sous_activites.map((sa) => (
+            <Card key={sa.id} withBorder radius="sm" padding={6} bg="white" style={{ borderLeft: "3px solid var(--mantine-color-gray-5)" }}>
+              <Group justify="space-between" align="center" wrap="wrap">
+                <div>
+                  <Group gap={6} wrap="wrap">
+                    <Badge color="gray" variant="light" size="xs">Sous-activité</Badge>
+                    <Text size="sm">{sa.libelle}</Text>
+                  </Group>
+                  {(sa.date_debut || sa.date_fin) && (
+                    <Text size="xs" c="dimmed" mt={2}>
+                      {sa.date_debut ?? "?"} → {sa.date_fin ?? "?"}
+                    </Text>
+                  )}
+                </div>
+                <Group gap={4} wrap="nowrap">
+                  <Tooltip label="Documents liés">
+                    <ActionIcon size="sm" variant="subtle" onClick={() => onDocumentsSousActivite(sa.id)}>
+                      <Paperclip size={12} />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label="Bénéficiaires liés">
+                    <ActionIcon size="sm" variant="subtle" onClick={() => onBeneficiairesSousActivite(sa.id)}>
+                      <Users size={12} />
+                    </ActionIcon>
+                  </Tooltip>
+                  {editionActive && (
+                    <Tooltip label="Supprimer la sous-activité">
+                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => onSupprimerSousActivite(sa)}>
+                        <Trash2 size={12} />
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                </Group>
+              </Group>
+            </Card>
+          ))}
+        </Stack>
+      )}
+    </Card>
+  );
+}
+
 export function ProjetDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const projetId = Number(id);
   const { data: projet, isLoading } = useProjet(projetId);
   const { data: dashboard } = useDashboardProjet(projetId);
+  const { data: niveauxActivite } = useNiveauxActivite(projetId);
+  const niveauxNoms = useMemo(
+    () => Object.fromEntries((niveauxActivite ?? []).map((n) => [n.profondeur, n.nom_niveau])),
+    [niveauxActivite],
+  );
 
   const createOG = useCreateObjectifGeneral();
   const createOS = useCreateObjectifSpecifique();
@@ -167,11 +368,13 @@ export function ProjetDetailPage() {
 
   const [modalActiviteFor, setModalActiviteFor] = useState<number | null>(null);
   const [modalActiviteEdition, setModalActiviteEdition] = useState<Activite | null>(null);
+  const [modalActiviteEnfantFor, setModalActiviteEnfantFor] = useState<Activite | null>(null);
   const [modalSousActiviteFor, setModalSousActiviteFor] = useState<number | null>(null);
   const [documentsActiviteId, setDocumentsActiviteId] = useState<number | null>(null);
   const [documentsSousActiviteId, setDocumentsSousActiviteId] = useState<number | null>(null);
   const [beneficiairesActiviteId, setBeneficiairesActiviteId] = useState<number | null>(null);
   const [beneficiairesSousActiviteId, setBeneficiairesSousActiviteId] = useState<number | null>(null);
+  const [trancheActiviteId, setTrancheActiviteId] = useState<Activite | null>(null);
   const [modalEditionOuvert, setModalEditionOuvert] = useState(false);
   const [recherchePlan, setRecherchePlan] = useState("");
   const [editionActive, setEditionActive] = useState(false);
@@ -313,6 +516,7 @@ export function ProjetDetailPage() {
 
       <Tabs defaultValue="hierarchie">
         <Tabs.List>
+          <Tabs.Tab value="niveaux">Configuration des niveaux</Tabs.Tab>
           <Tabs.Tab value="hierarchie">Planification</Tabs.Tab>
           <Tabs.Tab value="equipe">Équipe de projet</Tabs.Tab>
           <Tabs.Tab value="indicateurs">Indicateurs</Tabs.Tab>
@@ -398,116 +602,36 @@ export function ProjetDetailPage() {
                       {os.activites.length > 0 && (
                         <Stack mt="sm" gap="xs" pl="md">
                           {os.activites.map((act) => (
-                            <Card key={act.id} withBorder radius="sm" padding="xs" bg="gray.0" style={{ borderLeft: "3px solid var(--mantine-color-grape-5)" }}>
-                              <Group justify="space-between" align="flex-start" wrap="wrap">
-                                <div>
-                                  <Group gap={6} wrap="wrap">
-                                    <Badge color="grape" variant="light" size="xs">Activité</Badge>
-                                    {act.code_activite && <Text size="xs" c="dimmed">{act.code_activite}</Text>}
-                                    <Text size="sm" fw={500}>{act.libelle}</Text>
-                                  </Group>
-                                  {(act.date_debut || act.date_fin) && (
-                                    <Text size="xs" c="dimmed" mt={2}>
-                                      {act.date_debut ?? "?"} → {act.date_fin ?? "?"}
-                                    </Text>
-                                  )}
-                                </div>
-                                <Group gap={4} wrap="nowrap">
-                                  <Tooltip label="Documents liés">
-                                    <ActionIcon size="sm" variant="subtle" onClick={() => setDocumentsActiviteId(act.id)}>
-                                      <Paperclip size={12} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <Tooltip label="Bénéficiaires liés">
-                                    <ActionIcon size="sm" variant="subtle" onClick={() => setBeneficiairesActiviteId(act.id)}>
-                                      <Users size={12} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  {editionActive && (
-                                    <Tooltip label="Modifier l'activité">
-                                      <ActionIcon size="sm" variant="subtle" onClick={() => setModalActiviteEdition(act)}>
-                                        <Pencil size={12} />
-                                      </ActionIcon>
-                                    </Tooltip>
-                                  )}
-                                  <Tooltip label="Nouvelle sous-activité">
-                                    <ActionIcon size="sm" variant="subtle" onClick={() => setModalSousActiviteFor(act.id)}>
-                                      <Plus size={14} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  {editionActive && (
-                                    <Tooltip label="Supprimer l'activité">
-                                      <ActionIcon
-                                        size="sm"
-                                        variant="subtle"
-                                        color="red"
-                                        onClick={() =>
-                                          supprimerAvecConfirmation(
-                                            `Supprimer l'activité "${act.libelle}" ainsi que ses sous-activités et indicateurs liés ? Cette action est irréversible.`,
-                                            () => deleteActivite.mutateAsync(act.id),
-                                            "Activité supprimée",
-                                          )
-                                        }
-                                      >
-                                        <Trash2 size={12} />
-                                      </ActionIcon>
-                                    </Tooltip>
-                                  )}
-                                </Group>
-                              </Group>
-
-                              {act.sous_activites.length > 0 && (
-                                <Stack mt={6} gap={6} pl="md">
-                                  {act.sous_activites.map((sa) => (
-                                    <Card key={sa.id} withBorder radius="sm" padding={6} bg="white" style={{ borderLeft: "3px solid var(--mantine-color-gray-5)" }}>
-                                      <Group justify="space-between" align="center" wrap="wrap">
-                                        <div>
-                                          <Group gap={6} wrap="wrap">
-                                            <Badge color="gray" variant="light" size="xs">Sous-activité</Badge>
-                                            <Text size="sm">{sa.libelle}</Text>
-                                          </Group>
-                                          {(sa.date_debut || sa.date_fin) && (
-                                            <Text size="xs" c="dimmed" mt={2}>
-                                              {sa.date_debut ?? "?"} → {sa.date_fin ?? "?"}
-                                            </Text>
-                                          )}
-                                        </div>
-                                        <Group gap={4} wrap="nowrap">
-                                          <Tooltip label="Documents liés">
-                                            <ActionIcon size="sm" variant="subtle" onClick={() => setDocumentsSousActiviteId(sa.id)}>
-                                              <Paperclip size={12} />
-                                            </ActionIcon>
-                                          </Tooltip>
-                                          <Tooltip label="Bénéficiaires liés">
-                                            <ActionIcon size="sm" variant="subtle" onClick={() => setBeneficiairesSousActiviteId(sa.id)}>
-                                              <Users size={12} />
-                                            </ActionIcon>
-                                          </Tooltip>
-                                          {editionActive && (
-                                            <Tooltip label="Supprimer la sous-activité">
-                                              <ActionIcon
-                                                size="sm"
-                                                variant="subtle"
-                                                color="red"
-                                                onClick={() =>
-                                                  supprimerAvecConfirmation(
-                                                    `Supprimer la sous-activité "${sa.libelle}" ? Cette action est irréversible.`,
-                                                    () => deleteSousActivite.mutateAsync(sa.id),
-                                                    "Sous-activité supprimée",
-                                                  )
-                                                }
-                                              >
-                                                <Trash2 size={12} />
-                                              </ActionIcon>
-                                            </Tooltip>
-                                          )}
-                                        </Group>
-                                      </Group>
-                                    </Card>
-                                  ))}
-                                </Stack>
-                              )}
-                            </Card>
+                            <CarteActivite
+                              key={act.id}
+                              act={act}
+                              profondeur={0}
+                              editionActive={editionActive}
+                              niveauxNoms={niveauxNoms}
+                              utiliseNiveauxPersonnalises={(niveauxActivite?.length ?? 0) > 0}
+                              onDocuments={setDocumentsActiviteId}
+                              onBeneficiaires={setBeneficiairesActiviteId}
+                              onTranche={setTrancheActiviteId}
+                              onEditer={setModalActiviteEdition}
+                              onAjouterEnfant={setModalActiviteEnfantFor}
+                              onAjouterSousActivite={setModalSousActiviteFor}
+                              onSupprimer={(a) =>
+                                supprimerAvecConfirmation(
+                                  `Supprimer l'activité "${a.libelle}" ainsi que ses sous-activités, activités imbriquées et indicateurs liés ? Cette action est irréversible.`,
+                                  () => deleteActivite.mutateAsync(a.id),
+                                  "Activité supprimée",
+                                )
+                              }
+                              onDocumentsSousActivite={setDocumentsSousActiviteId}
+                              onBeneficiairesSousActivite={setBeneficiairesSousActiviteId}
+                              onSupprimerSousActivite={(sa) =>
+                                supprimerAvecConfirmation(
+                                  `Supprimer la sous-activité "${sa.libelle}" ? Cette action est irréversible.`,
+                                  () => deleteSousActivite.mutateAsync(sa.id),
+                                  "Sous-activité supprimée",
+                                )
+                              }
+                            />
                           ))}
                         </Stack>
                       )}
@@ -517,6 +641,10 @@ export function ProjetDetailPage() {
               </>
             )}
           </Card>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="niveaux" pt="md">
+          <NiveauxActiviteTab projetId={projetId} />
         </Tabs.Panel>
 
         <Tabs.Panel value="equipe" pt="md">
@@ -592,6 +720,25 @@ export function ProjetDetailPage() {
         )}
       </Modal>
 
+      <Modal
+        opened={modalActiviteEnfantFor !== null}
+        onClose={() => setModalActiviteEnfantFor(null)}
+        title={`Nouveau niveau imbriqué sous « ${modalActiviteEnfantFor?.libelle ?? ""} »`}
+        size="lg"
+      >
+        {modalActiviteEnfantFor !== null && (
+          <ActiviteForm
+            objectifSpecifiqueId={modalActiviteEnfantFor.objectif_specifique}
+            activiteParentId={modalActiviteEnfantFor.id}
+            cadreStrategiqueId={projet.cadre_strategique}
+            projetId={projetId}
+            budgetProjetTotal={Number(projet.budget_total)}
+            budgetDejaAlloue={budgetDejaAlloue}
+            onDone={() => setModalActiviteEnfantFor(null)}
+          />
+        )}
+      </Modal>
+
       <Modal opened={modalSousActiviteFor !== null} onClose={() => setModalSousActiviteFor(null)} title="Nouvelle sous-activité" size="lg">
         {modalSousActiviteFor !== null && (
           <SousActiviteForm
@@ -643,6 +790,17 @@ export function ProjetDetailPage() {
       >
         {beneficiairesSousActiviteId !== null && (
           <BeneficiairesTab projetId={projetId} sousActiviteId={beneficiairesSousActiviteId} />
+        )}
+      </Modal>
+
+      <Modal
+        opened={trancheActiviteId !== null}
+        onClose={() => setTrancheActiviteId(null)}
+        title={`Suivi détaillé par période — ${trancheActiviteId?.libelle ?? ""}`}
+        size="xl"
+      >
+        {trancheActiviteId !== null && (
+          <TranchesPlanifieesTab activiteId={trancheActiviteId.id} unite={trancheActiviteId.unite_quantite} />
         )}
       </Modal>
     </Stack>

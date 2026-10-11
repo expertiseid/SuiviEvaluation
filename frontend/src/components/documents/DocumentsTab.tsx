@@ -21,6 +21,7 @@ import {
   useCreateDocument,
   useCreateDossier,
   useDeleteDocument,
+  useDeleteDossier,
   useDocumentVersions,
   useDocuments,
   useDossiers,
@@ -31,19 +32,32 @@ import { messageErreurApi } from "../../utils/erreurs";
 import { EmptyState } from "../common/EmptyState";
 import type { GedDocument } from "../../types";
 
-function NouveauDossierModal({ projetId, opened, onClose }: { projetId: number; opened: boolean; onClose: () => void }) {
+function NouveauDossierModal({
+  projetId,
+  opened,
+  onClose,
+  onCree,
+}: {
+  /** Absent = dossier libre, sans rattachement à un projet (bibliothèque "Documents"). */
+  projetId?: number;
+  opened: boolean;
+  onClose: () => void;
+  /** Permet au parent de sélectionner immédiatement le dossier créé, pour qu'il soit visible sans avoir à rouvrir la liste déroulante. */
+  onCree?: (dossierId: number) => void;
+}) {
   const createDossier = useCreateDossier();
   const [nom, setNom] = useState("");
 
   async function handleCreate() {
     if (!nom.trim()) return;
     try {
-      await createDossier.mutateAsync({ nom: nom.trim(), projet: projetId });
+      const dossier = await createDossier.mutateAsync({ nom: nom.trim(), projet: projetId ?? null });
       notifications.show({ message: "Dossier créé", color: "green" });
       setNom("");
+      onCree?.(dossier.id);
       onClose();
-    } catch {
-      notifications.show({ message: "Erreur lors de la création du dossier", color: "red" });
+    } catch (error) {
+      notifications.show({ message: messageErreurApi(error, "Erreur lors de la création du dossier"), color: "red" });
     }
   }
 
@@ -198,6 +212,7 @@ export function DocumentsTab({
     dossier: dossierActif ? Number(dossierActif) : undefined,
   });
   const deleteDocument = useDeleteDocument();
+  const deleteDossier = useDeleteDossier();
 
   const [modalDossier, setModalDossier] = useState(false);
   const [modalDocument, setModalDocument] = useState(false);
@@ -209,6 +224,10 @@ export function DocumentsTab({
   // cette vue unifiée (inutile quand on est déjà dans le contexte d'une
   // seule activité/sous-activité précise).
   const afficherRattachement = projetId !== undefined;
+  // Les dossiers n'existent que pour un projet précis ou en libre (aucun
+  // rattachement) — pas de sens pour une vue déjà scopée à une
+  // activité/sous-activité précise.
+  const afficherDossiers = projetId !== undefined || (activiteId === undefined && sousActiviteId === undefined);
 
   function rattachementDe(doc: GedDocument) {
     if (doc.activite_nom) return `Activité — ${doc.activite_nom}`;
@@ -233,23 +252,52 @@ export function DocumentsTab({
     });
   }
 
+  function handleSupprimerDossier() {
+    if (!dossierActif) return;
+    const dossier = dossiers?.find((d) => String(d.id) === dossierActif);
+    confirmerSuppression({
+      message: `Supprimer le dossier "${dossier?.nom ?? ""}" ainsi que tous les documents qu'il contient ? Cette action est irréversible.`,
+      onConfirm: async () => {
+        try {
+          await deleteDossier.mutateAsync(Number(dossierActif));
+          setDossierActif(null);
+          notifications.show({ message: "Dossier supprimé", color: "green" });
+        } catch (error) {
+          notifications.show({
+            message: messageErreurApi(error, "Erreur lors de la suppression du dossier"),
+            color: "red",
+          });
+        }
+      },
+    });
+  }
+
   return (
     <Stack gap="md">
       <Group justify="space-between">
-        {projetId ? (
-          <Select
-            placeholder="Tous les dossiers"
-            data={dossiers?.map((d) => ({ value: String(d.id), label: d.nom })) ?? []}
-            value={dossierActif}
-            onChange={setDossierActif}
-            clearable
-            w={260}
-          />
+        {afficherDossiers ? (
+          <Group gap={6}>
+            <Select
+              placeholder="Tous les dossiers"
+              data={dossiers?.map((d) => ({ value: String(d.id), label: d.nom })) ?? []}
+              value={dossierActif}
+              onChange={setDossierActif}
+              clearable
+              w={260}
+            />
+            {dossierActif && (
+              <Tooltip label="Supprimer ce dossier">
+                <ActionIcon variant="subtle" color="red" loading={deleteDossier.isPending} onClick={handleSupprimerDossier}>
+                  <Trash2 size={16} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Group>
         ) : (
           <div />
         )}
         <Group gap="xs">
-          {projetId && (
+          {afficherDossiers && (
             <Button variant="light" leftSection={<FolderPlus size={16} />} onClick={() => setModalDossier(true)}>
               Nouveau dossier
             </Button>
@@ -271,7 +319,9 @@ export function DocumentsTab({
                 ? "Aucun document dans ce dossier."
                 : sousActiviteId
                   ? "Aucun document lié à cette sous-activité."
-                  : "Aucun document lié à cette activité."
+                  : activiteId
+                    ? "Aucun document lié à cette activité."
+                    : "Aucun document pour l'instant."
             }
           />
         ) : (
@@ -327,8 +377,13 @@ export function DocumentsTab({
         )}
       </Card>
 
-      {projetId !== undefined && (
-        <NouveauDossierModal projetId={projetId} opened={modalDossier} onClose={() => setModalDossier(false)} />
+      {afficherDossiers && (
+        <NouveauDossierModal
+          projetId={projetId}
+          opened={modalDossier}
+          onClose={() => setModalDossier(false)}
+          onCree={(dossierId) => setDossierActif(String(dossierId))}
+        />
       )}
       <NouveauDocumentModal
         projetId={projetId}

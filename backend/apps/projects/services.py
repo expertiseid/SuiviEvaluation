@@ -34,6 +34,11 @@ def supprimer_projet_cascade(projet):
 
         PointSuivi.objects.filter(Q(activite__in=activites) | Q(sous_activite__in=sous_activites)).delete()
         sous_activites.delete()
+        # activite_parent est en PROTECT : puisque TOUTES les activités de ce
+        # projet sont supprimées ensemble, on casse d'abord les liens
+        # parent/enfant entre elles (plutôt que de calculer un ordre de
+        # suppression feuilles-vers-racine) avant le bulk delete.
+        activites.update(activite_parent=None)
         activites.delete()
         objectifs_specifiques.delete()
         objectifs_generaux.delete()
@@ -66,6 +71,7 @@ def supprimer_objectif_general_cascade(objectif_general):
 
         PointSuivi.objects.filter(Q(activite__in=activites) | Q(sous_activite__in=sous_activites)).delete()
         sous_activites.delete()
+        activites.update(activite_parent=None)
         activites.delete()
         objectifs_specifiques.delete()
         objectif_general.delete()
@@ -88,6 +94,7 @@ def supprimer_objectif_specifique_cascade(objectif_specifique):
 
         PointSuivi.objects.filter(Q(activite__in=activites) | Q(sous_activite__in=sous_activites)).delete()
         sous_activites.delete()
+        activites.update(activite_parent=None)
         activites.delete()
         objectif_specifique.delete()
 
@@ -118,6 +125,12 @@ def supprimer_activite_cascade(activite):
     from .models import SousActivite
 
     with transaction.atomic():
+        # Les activités imbriquées (activite_parent) doivent être supprimées
+        # avant leur parent (activite_parent est en PROTECT) — récursif, pour
+        # une imbrication sur plusieurs niveaux.
+        for enfant in list(activite.enfants.all()):
+            supprimer_activite_cascade(enfant)
+
         indicateurs = Indicateur.objects.filter(activite=activite)
         ValeurIndicateur.objects.filter(indicateur__in=indicateurs).delete()
         indicateurs.delete()

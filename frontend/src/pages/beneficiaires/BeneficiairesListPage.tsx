@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Pencil, Trash2, Upload } from "lucide-react";
-import { ActionIcon, Button, Group, Modal, Pagination, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import { ActionIcon, Badge, Button, Group, Modal, Pagination, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useBeneficiaires, useDeleteBeneficiaire } from "../../api/beneficiaries";
+import { useStatutsParticuliers } from "../../api/referentiels";
 import { confirmerSuppression } from "../../components/common/confirmerSuppression";
 import { messageErreurApi } from "../../utils/erreurs";
 import { BeneficiaireForm } from "./BeneficiaireForm";
@@ -17,6 +18,11 @@ export function BeneficiairesListPage() {
   const [page, setPage] = useState(1);
   const { data, isLoading } = useBeneficiaires(search || undefined, page);
   const beneficiaires = data?.results;
+  const { data: statuts } = useStatutsParticuliers();
+
+  function libellesStatuts(b: Beneficiaire) {
+    return b.statuts_particuliers.map((sid) => statuts?.find((s) => s.id === sid)?.libelle).filter(Boolean);
+  }
   const nombrePages = data ? Math.ceil(data.count / TAILLE_PAGE) : 1;
   const deleteBeneficiaire = useDeleteBeneficiaire();
   const [modalOpen, setModalOpen] = useState(false);
@@ -79,6 +85,7 @@ export function BeneficiairesListPage() {
               <Table.Th>Tranche d'âge</Table.Th>
               <Table.Th>Téléphone</Table.Th>
               <Table.Th>Zone</Table.Th>
+              <Table.Th>Statut particulier</Table.Th>
               <Table.Th>Projets</Table.Th>
               <Table.Th w={40} />
             </Table.Tr>
@@ -95,6 +102,17 @@ export function BeneficiairesListPage() {
                 <Table.Td>{b.tranche_age ?? "—"}</Table.Td>
                 <Table.Td>{b.telephone}</Table.Td>
                 <Table.Td>{b.zone_nom ?? "—"}</Table.Td>
+                <Table.Td>
+                  {libellesStatuts(b).length > 0 ? (
+                    <Group gap={4} wrap="wrap">
+                      {libellesStatuts(b).map((l) => (
+                        <Badge key={l} variant="light" color="grape" size="sm">{l}</Badge>
+                      ))}
+                    </Group>
+                  ) : (
+                    "—"
+                  )}
+                </Table.Td>
                 <Table.Td>{b.participations.map((p) => p.projet_nom).join(", ") || "—"}</Table.Td>
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">

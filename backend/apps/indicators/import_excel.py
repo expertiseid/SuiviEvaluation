@@ -347,14 +347,21 @@ def importer_indicateurs_depuis_feuille(feuille, projet=None) -> dict:
             rattachement = resolu
 
         valeur_reference = valeur(ligne, "Valeur de référence")
-        indicateur = Indicateur.objects.create(
-            libelle=str(libelle).strip(),
-            unite=str(unite).strip(),
-            valeur_reference=valeur_reference if valeur_reference not in (None, "") else None,
-            valeur_cible=cible,
-            frequence_collecte=frequence,
-            **rattachement,
-        )
+        try:
+            indicateur = Indicateur.objects.create(
+                libelle=str(libelle).strip(),
+                unite=str(unite).strip(),
+                valeur_reference=valeur_reference if valeur_reference not in (None, "") else None,
+                valeur_cible=cible,
+                frequence_collecte=frequence,
+                **rattachement,
+            )
+        except Exception as exc:
+            # Best-effort comme le reste de cet import : une ligne en erreur
+            # (ex : contrainte base de données) ne doit jamais faire échouer
+            # tout le fichier.
+            erreurs.append({"ligne": numero, "message": f"Impossible de créer cet indicateur : {exc}"})
+            continue
         indicateurs_par_nom[indicateur.libelle.strip().lower()] = indicateur
         crees += 1
 

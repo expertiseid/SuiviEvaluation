@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
-import type { PointSuivi, SuiviDashboard } from "../types";
+import type { Paginated, PointSuivi, SuiviDashboard, TranchePlanifiee } from "../types";
 
 export function useSuiviDashboard(projetId: number | undefined) {
   return useQuery({
@@ -64,5 +64,39 @@ export function useDeletePointSuivi() {
       queryClient.invalidateQueries({ queryKey: ["projets"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
+  });
+}
+
+export function useTranchesPlanifiees(params: { activite?: number; indicateur?: number }) {
+  return useQuery({
+    queryKey: ["tranches-planifiees", params],
+    queryFn: async () =>
+      (await apiClient.get<Paginated<TranchePlanifiee>>("/tranches-planifiees/", { params })).data.results,
+    enabled: !!(params.activite || params.indicateur),
+  });
+}
+
+export function useCreateTranchePlanifiee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      activite?: number;
+      indicateur?: number;
+      libelle: string;
+      periode_debut: string;
+      periode_fin: string;
+      cible: number;
+    }) => (await apiClient.post<TranchePlanifiee>("/tranches-planifiees/", payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tranches-planifiees"] }),
+  });
+}
+
+export function useDeleteTranchePlanifiee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/tranches-planifiees/${id}/`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tranches-planifiees"] }),
   });
 }

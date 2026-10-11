@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ActiviteViewSet,
     EquipeViewSet,
+    NiveauActiviteViewSet,
     ObjectifGeneralViewSet,
     ObjectifSpecifiqueViewSet,
     ProjetViewSet,
@@ -15,6 +16,7 @@ router.register("objectifs-generaux", ObjectifGeneralViewSet, basename="objectif
 router.register("objectifs-specifiques", ObjectifSpecifiqueViewSet, basename="objectif-specifique")
 router.register("activites", ActiviteViewSet, basename="activite")
 router.register("sous-activites", SousActiviteViewSet, basename="sous-activite")
+router.register("niveaux-activite", NiveauActiviteViewSet, basename="niveau-activite")
 router.register("equipes", EquipeViewSet, basename="equipe")
 
 urlpatterns = router.urls

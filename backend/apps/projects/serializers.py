@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
-from .models import Activite, Equipe, ObjectifGeneral, ObjectifSpecifique, Projet, SousActivite
+from .models import Activite, Equipe, NiveauActivite, ObjectifGeneral, ObjectifSpecifique, Projet, SousActivite
+
+
+class NiveauActiviteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NiveauActivite
+        fields = ("id", "projet", "profondeur", "nom_niveau")
 
 
 class EquipeSerializer(serializers.ModelSerializer):
@@ -68,6 +74,7 @@ class ActiviteSerializer(serializers.ModelSerializer):
     equipe_responsable_nom = serializers.StringRelatedField(source="equipe_responsable", read_only=True)
     axe_strategique_libelle = serializers.StringRelatedField(source="axe_strategique", read_only=True)
     sous_activites = SousActiviteSerializer(many=True, read_only=True)
+    enfants = serializers.SerializerMethodField()
     taux_realisation = serializers.ReadOnlyField()
     taux_execution_financiere = serializers.ReadOnlyField()
     alerte_retard = serializers.ReadOnlyField()
@@ -77,9 +84,11 @@ class ActiviteSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "objectif_specifique",
+            "activite_parent",
             "code_activite",
             "libelle",
             "statut",
+            "commentaire",
             "axe_strategique",
             "axe_strategique_libelle",
             "budget_alloue",
@@ -101,11 +110,18 @@ class ActiviteSerializer(serializers.ModelSerializer):
             "equipe_responsable",
             "equipe_responsable_nom",
             "sous_activites",
+            "enfants",
             "taux_realisation",
             "taux_execution_financiere",
             "alerte_retard",
         )
         read_only_fields = ("statut", "quantite_realisee", "budget_realise")
+
+    def get_enfants(self, obj):
+        # Activités imbriquées sous celle-ci (voir Activite.activite_parent) —
+        # même sérialiseur, récursif : chaque enfant peut lui-même avoir des
+        # enfants (profondeur illimitée).
+        return ActiviteSerializer(obj.enfants.all(), many=True, context=self.context).data
 
     def validate(self, attrs):
         if "axe_strategique" in attrs and attrs["axe_strategique"] is not None:
@@ -117,15 +133,52 @@ class ActiviteSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"axe_strategique": "Cet élément stratégique n'appartient pas au cadre stratégique du projet."}
                 )
+
+        activite_parent = attrs.get("activite_parent") or getattr(self.instance, "activite_parent", None)
+        objectif_specifique = attrs.get("objectif_specifique") or getattr(self.instance, "objectif_specifique", None)
+        if activite_parent and objectif_specifique and activite_parent.objectif_specifique_id != objectif_specifique.id:
+            raise serializers.ValidationError(
+                {"activite_parent": "L'activité parente doit être rattachée au même objectif spécifique."}
+            )
         return attrs
+
+    def create(self, validated_data):
+        # responsables (M2M) doit être retiré avant la création de l'instance
+        # (comme le fait ModelSerializer.create() par défaut) — on reproduit
+        # ce comportement à la main puisqu'on a besoin d'appeler clean() juste
+        # avant le save() pour valider activite_parent.
+        responsables = validated_data.pop("responsables", None)
+        instance = Activite(**validated_data)
+        instance.clean()
+        instance.save()
+        if responsables is not None:
+            instance.responsables.set(responsables)
+        return instance
+
+    def update(self, instance, validated_data):
+        responsables = validated_data.pop("responsables", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.clean()
+        instance.save()
+        if responsables is not None:
+            instance.responsables.set(responsables)
+        return instance
 
 
 class ObjectifSpecifiqueSerializer(serializers.ModelSerializer):
-    activites = ActiviteSerializer(many=True, read_only=True)
+    # Seulement les activités racines (sans activite_parent) : les activités
+    # imbriquées apparaissent via ActiviteSerializer.enfants, pas ici — sinon
+    # elles seraient dupliquées (une fois à plat, une fois nichées).
+    activites = serializers.SerializerMethodField()
 
     class Meta:
         model = ObjectifSpecifique
         fields = ("id", "objectif_general", "libelle", "description", "activites")
+
+    def get_activites(self, obj):
+        racines = obj.activites.filter(activite_parent__isnull=True)
+        return ActiviteSerializer(racines, many=True, context=self.context).data
 
 
 class ObjectifGeneralSerializer(serializers.ModelSerializer):

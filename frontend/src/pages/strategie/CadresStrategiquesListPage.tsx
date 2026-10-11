@@ -187,7 +187,12 @@ export function CadresStrategiquesListPage() {
       )}
 
       <CadreModal opened={modalOuvert} onClose={() => setModalOuvert(false)} />
-      <CadreModal opened={!!cadreEnEdition} onClose={() => setCadreEnEdition(null)} cadreExistant={cadreEnEdition} />
+      <CadreModal
+        key={cadreEnEdition?.id ?? "aucun"}
+        opened={!!cadreEnEdition}
+        onClose={() => setCadreEnEdition(null)}
+        cadreExistant={cadreEnEdition}
+      />
     </Stack>
   );
 }

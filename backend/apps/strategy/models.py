@@ -90,7 +90,11 @@ class ElementStrategique(TimestampedModel):
     description = models.TextField(blank=True)
 
     class Meta:
-        ordering = ("type_niveau__ordre", "code", "nom")
+        # Tri par id (= ordre de création) et non par code/nom : un import
+        # Excel doit remonter dans l'ordre de saisie du fichier, pas réordonné
+        # alphabétiquement — ce que "code, nom" faisait involontairement dès
+        # que plusieurs éléments partageaient un code vide ou similaire.
+        ordering = ("type_niveau__ordre", "id")
 
     def __str__(self):
         return f"{self.code} — {self.nom}" if self.code else self.nom

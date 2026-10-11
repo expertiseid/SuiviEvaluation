@@ -27,13 +27,15 @@ export function useUploadPieceJustificative() {
 
 export function useDossiers(projetId?: number) {
   return useQuery({
-    queryKey: ["dossiers", projetId],
-    queryFn: async () =>
-      (
-        await apiClient.get<Paginated<Dossier>>("/dossiers/", {
-          params: projetId ? { projet: projetId } : undefined,
-        })
-      ).data.results,
+    queryKey: ["dossiers", projetId ?? "global"],
+    queryFn: async () => {
+      // Sans projetId (bibliothèque "Documents" libre) : on ne veut que les
+      // dossiers sans projet, pas tous les dossiers visibles de tous les
+      // projets — filtré côté client, l'API ne distingue pas "aucun projet"
+      // d'un "tous les projets" via un simple paramètre numérique.
+      const tous = (await apiClient.get<Paginated<Dossier>>("/dossiers/")).data.results;
+      return tous.filter((d) => (projetId ? d.projet === projetId : d.projet === null));
+    },
   });
 }
 
@@ -43,6 +45,19 @@ export function useCreateDossier() {
     mutationFn: async (payload: { nom: string; projet?: number | null; parent?: number | null }) =>
       (await apiClient.post<Dossier>("/dossiers/", payload)).data,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dossiers"] }),
+  });
+}
+
+export function useDeleteDossier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/dossiers/${id}/`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dossiers"] });
+      queryClient.invalidateQueries({ queryKey: ["ged-documents"] });
+    },
   });
 }
 

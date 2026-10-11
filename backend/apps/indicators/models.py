@@ -13,7 +13,10 @@ class Indicateur(TimestampedModel):
         SEMESTRIELLE = "SEMESTRIELLE", "Semestrielle"
         ANNUELLE = "ANNUELLE", "Annuelle"
 
-    libelle = models.CharField(max_length=300)
+    libelle = models.TextField(
+        help_text="Énoncé complet de l'indicateur — sans limite de longueur : un indicateur de cadre logique "
+        "formel est souvent une phrase complète dépassant largement 300 caractères."
+    )
     unite = models.CharField(max_length=50)
     valeur_reference = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     valeur_reference_date = models.DateField(null=True, blank=True)

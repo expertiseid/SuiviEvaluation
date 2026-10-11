@@ -12,11 +12,12 @@ from apps.notifications.models import Notification
 from apps.notifications.services import notifier, notifier_par_role
 
 from .import_excel import generer_modele_import_projet, importer_projet
-from .models import Activite, Equipe, ObjectifGeneral, ObjectifSpecifique, Projet, SousActivite
+from .models import Activite, Equipe, NiveauActivite, ObjectifGeneral, ObjectifSpecifique, Projet, SousActivite
 from .queryset_filters import visible_projets_ids
 from .serializers import (
     ActiviteSerializer,
     EquipeSerializer,
+    NiveauActiviteSerializer,
     ObjectifGeneralSerializer,
     ObjectifSpecifiqueSerializer,
     ProjetSerializer,
@@ -125,7 +126,7 @@ class ObjectifSpecifiqueViewSet(viewsets.ModelViewSet):
 class ActiviteViewSet(viewsets.ModelViewSet):
     serializer_class = ActiviteSerializer
     permission_classes = (HasGlobalVisibilityOrAssigned,)
-    filterset_fields = ("objectif_specifique", "responsable")
+    filterset_fields = ("objectif_specifique", "activite_parent", "responsable")
 
     CHAMPS_SURVEILLES = ("date_debut", "date_fin", "budget_alloue", "quantite_prevue", "statut")
 
@@ -184,6 +185,15 @@ class ActiviteViewSet(viewsets.ModelViewSet):
                 lien,
                 exclure=self.request.user,
             )
+
+
+class NiveauActiviteViewSet(viewsets.ModelViewSet):
+    serializer_class = NiveauActiviteSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+    filterset_fields = ("projet",)
+
+    def get_queryset(self):
+        return NiveauActivite.objects.filter(projet__id__in=visible_projets_ids(self.request.user))
 
 
 class SousActiviteViewSet(viewsets.ModelViewSet):

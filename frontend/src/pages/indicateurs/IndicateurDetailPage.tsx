@@ -8,6 +8,7 @@ import { AlerteBadge } from "../../components/indicators/AlerteBadge";
 import { HistoriqueModification } from "../../components/audit/HistoriqueModification";
 import { confirmerSuppression } from "../../components/common/confirmerSuppression";
 import { BoutonModeEdition } from "../../components/common/BoutonModeEdition";
+import { TranchesPlanifieesTab } from "../../components/suivi/TranchesPlanifieesTab";
 import { IndicateurForm } from "./IndicateurForm";
 
 export function IndicateurDetailPage() {
@@ -69,6 +70,11 @@ export function IndicateurDetailPage() {
           )}
         </Group>
       </Group>
+
+      <div>
+        <Text size="sm" fw={600} mb="xs">Suivi détaillé par période</Text>
+        <TranchesPlanifieesTab indicateurId={indicateurId} unite={indicateur.unite} />
+      </div>
 
       <HistoriqueModification appLabel="indicators" modelName="indicateur" objectId={indicateurId} />
 

@@ -229,3 +229,38 @@ def synchroniser_sous_activite_depuis_suivi(sous_activite):
     if dernier and dernier.statut:
         sous_activite.statut = dernier.statut
     sous_activite.save(update_fields=["quantite_realisee", "statut", "updated_at"])
+
+
+def realise_tranche(tranche) -> Decimal | None:
+    """
+    Somme des PointSuivi (activité) ou ValeurIndicateur (indicateur) dont la
+    période est entièrement CONTENUE dans celle de la tranche — une saisie
+    qui déborde la tranche n'y est pas comptée, pour ne jamais compter deux
+    fois un même point sur deux tranches voisines.
+    """
+    if tranche.activite_id:
+        from .models import PointSuivi
+
+        total = PointSuivi.objects.filter(
+            activite=tranche.activite,
+            periode_debut__gte=tranche.periode_debut,
+            periode_fin__lte=tranche.periode_fin,
+        ).aggregate(total=Sum("quantite_realisee"))["total"]
+    else:
+        from apps.indicators.models import ValeurIndicateur
+
+        total = ValeurIndicateur.objects.filter(
+            indicateur=tranche.indicateur,
+            periode_debut__gte=tranche.periode_debut,
+            periode_fin__lte=tranche.periode_fin,
+        ).aggregate(total=Sum("valeur_realisee"))["total"]
+    return total
+
+
+def statut_tranche(tranche, realise, aujourdhui) -> str:
+    """ATTEINTE : réalisé >= cible. EN_RETARD : échéance passée, cible non atteinte. EN_COURS : sinon."""
+    if realise is not None and tranche.cible and realise >= tranche.cible:
+        return "ATTEINTE"
+    if tranche.periode_fin < aujourdhui:
+        return "EN_RETARD"
+    return "EN_COURS"

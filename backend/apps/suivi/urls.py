@@ -4,6 +4,7 @@ from django.urls import path
 
 from .views import (
     PointSuiviViewSet,
+    TranchePlanifieeViewSet,
     suivi_dashboard_projet,
     suivi_exporter_excel,
     suivi_exporter_pdf,
@@ -11,6 +12,7 @@ from .views import (
 
 router = DefaultRouter()
 router.register("points-suivi", PointSuiviViewSet, basename="point-suivi")
+router.register("tranches-planifiees", TranchePlanifieeViewSet, basename="tranche-planifiee")
 
 urlpatterns = router.urls + [
     path("suivi/projets/<int:projet_id>/dashboard/", suivi_dashboard_projet, name="suivi-dashboard-projet"),

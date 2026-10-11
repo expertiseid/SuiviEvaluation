@@ -10,8 +10,8 @@ from apps.projects.queryset_filters import visible_projets_ids
 
 from .export_excel import exporter_suivi_excel
 from .export_pdf import exporter_suivi_pdf
-from .models import PointSuivi
-from .serializers import PointSuiviSerializer
+from .models import PointSuivi, TranchePlanifiee
+from .serializers import PointSuiviSerializer, TranchePlanifieeSerializer
 from .services import construire_dashboard_suivi, synchroniser_activite_depuis_suivi, synchroniser_sous_activite_depuis_suivi
 
 
@@ -51,6 +51,29 @@ class PointSuiviViewSet(viewsets.ModelViewSet):
             synchroniser_activite_depuis_suivi(activite)
         else:
             synchroniser_sous_activite_depuis_suivi(sous_activite)
+
+
+class TranchePlanifieeViewSet(viewsets.ModelViewSet):
+    serializer_class = TranchePlanifieeSerializer
+    permission_classes = (HasGlobalVisibilityOrAssigned,)
+    filterset_fields = ("activite", "indicateur")
+
+    def get_queryset(self):
+        ids = visible_projets_ids(self.request.user)
+        return TranchePlanifiee.objects.filter(
+            Q(activite__objectif_specifique__objectif_general__projet__id__in=ids)
+            | Q(
+                indicateur__isnull=False,
+                indicateur__projet__isnull=True,
+                indicateur__objectif_general__isnull=True,
+                indicateur__objectif_specifique__isnull=True,
+                indicateur__activite__isnull=True,
+            )
+            | Q(indicateur__projet__id__in=ids)
+            | Q(indicateur__objectif_general__projet__id__in=ids)
+            | Q(indicateur__objectif_specifique__objectif_general__projet__id__in=ids)
+            | Q(indicateur__activite__objectif_specifique__objectif_general__projet__id__in=ids)
+        ).select_related("activite", "indicateur")
 
 
 def _projet_visible_ou_404(request, projet_id):

@@ -295,7 +295,12 @@ function ConfigurationNiveaux({
         </Button>
       </Group>
 
-      <NiveauModal opened={!!niveauEnEdition} onClose={() => setNiveauEnEdition(null)} niveauExistant={niveauEnEdition} />
+      <NiveauModal
+        key={niveauEnEdition?.id ?? "aucun"}
+        opened={!!niveauEnEdition}
+        onClose={() => setNiveauEnEdition(null)}
+        niveauExistant={niveauEnEdition}
+      />
     </Card>
   );
 }
@@ -665,6 +670,7 @@ function Arborescence({
         elements={elements}
       />
       <ElementModal
+        key={elementEnEdition?.id ?? "aucun"}
         opened={!!elementEnEdition}
         onClose={() => setElementEnEdition(null)}
         typeNiveau={null}

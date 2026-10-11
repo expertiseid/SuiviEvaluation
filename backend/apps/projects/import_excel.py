@@ -7,11 +7,24 @@ l'import des autres, tout est rapporté au client.
 """
 import datetime
 import io
+import unicodedata
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 
 from apps.core.excel_utils import figer_entete, quadriller
+
+
+def _normaliser_entete(texte: str) -> str:
+    """
+    Compare les en-têtes en ignorant accents/casse/tirets-vs-espaces/espaces
+    en trop (ex : « Sous-activité » == « sous   activite ») — pour tolérer
+    les petites variations de saisie d'un en-tête sans risquer de confondre
+    une colonne avec une autre (comparaison toujours à un nom précis, jamais
+    une déduction depuis le contenu des lignes).
+    """
+    sans_accents = "".join(c for c in unicodedata.normalize("NFD", texte) if unicodedata.category(c) != "Mn")
+    return " ".join(sans_accents.replace("-", " ").lower().split())
 
 CHAMPS_PROJET = [
     ("Nom du projet", "Programme d'appui à la résilience communautaire"),
@@ -48,11 +61,12 @@ COLONNES_PLANIFICATION = [
     "Unité",
     "Date début (AAAA-MM-JJ)",
     "Date fin (AAAA-MM-JJ)",
+    "Commentaire",
 ]
 
 LIGNES_EXEMPLE_PLANIFICATION = [
-    ["Améliorer la sécurité alimentaire des ménages vulnérables", "", "", "", "", "", "", "", "", "", ""],
-    ["", "Renforcer les capacités techniques des producteurs", "", "", "", "", "", "", "", "", ""],
+    ["Améliorer la sécurité alimentaire des ménages vulnérables", "", "", "", "", "", "", "", "", "", "", ""],
+    ["", "Renforcer les capacités techniques des producteurs", "", "", "", "", "", "", "", "", "", ""],
     [
         "",
         "",
@@ -65,8 +79,9 @@ LIGNES_EXEMPLE_PLANIFICATION = [
         "producteurs",
         "2026-02-01",
         "2026-06-30",
+        "",
     ],
-    ["", "", "", "", "Session de formation en zone rurale", "", "", 100, "producteurs", "2026-02-01", "2026-03-31"],
+    ["", "", "", "", "Session de formation en zone rurale", "", "", 100, "producteurs", "2026-02-01", "2026-03-31", ""],
 ]
 
 
@@ -131,13 +146,22 @@ def generer_modele_import_projet() -> bytes:
     ])
     instructions.append([
         "- Feuille « Planification » : une colonne = un niveau (Objectif général → Objectif spécifique → "
-        "Activité → Sous-activité). Sur chaque ligne, remplis UNE SEULE de ces 4 colonnes : son rattachement "
-        "est déduit automatiquement (le dernier élément de niveau immédiatement supérieur renseigné au-dessus)."
+        "Activité → Sous-activité). Sur chaque ligne, remplis UNE SEULE de ces colonnes de niveau : son "
+        "rattachement est déduit automatiquement (le dernier élément de niveau immédiatement supérieur "
+        "renseigné au-dessus)."
+    ])
+    instructions.append([
+        "- Tu peux insérer d'AUTRES colonnes de niveau entre « Objectif spécifique » et « Sous-activité », "
+        "nommées comme tu veux (ex : « Résultat »), pour imbriquer un niveau de plus — le nom de la colonne "
+        "devient le nom affiché de ce niveau. Attention : toute colonne placée dans cette zone devient un "
+        "niveau, y compris une colonne qui n'en est pas censée être un (une note ponctuelle par ex.) — place "
+        "ce genre de colonne avant « Objectif général » ou après « Date fin » pour éviter ça."
     ])
     instructions.append([
         "- Les colonnes Code activité / Valeur de base / Budget alloué / Quantité prévue / Unité / Date début / "
-        "Date fin s'appliquent à la ligne d'Activité ou de Sous-activité correspondante (Code activité, Valeur "
-        "de base et Budget alloué uniquement pour une Activité)."
+        "Date fin / Commentaire s'appliquent à la ligne d'Activité (à n'importe quel niveau imbriqué) ou de "
+        "Sous-activité correspondante (Code activité, Valeur de base, Budget alloué et Commentaire uniquement "
+        "pour une Activité) — toujours sur LA MÊME LIGNE que le niveau concerné, jamais sur une ligne à part."
     ])
     instructions.append([
         "- Valeur de base : niveau avant le démarrage de l'activité (comme la Valeur de référence d'un "
@@ -216,10 +240,19 @@ def _lire_champs_cle_valeur(feuille) -> dict:
 def importer_planification(feuille, projet) -> dict:
     """
     Importe la feuille « Planification » (Objectif général > Objectif
-    spécifique > Activité > Sous-activité, format « plan » comme la
-    structuration stratégique) dans la hiérarchie du projet donné.
+    spécifique > [niveaux d'Activité imbriqués, en nombre libre] >
+    Sous-activité) dans la hiérarchie du projet donné.
+
+    Les colonnes entre « Objectif spécifique » et « Sous-activité » forment
+    une chaîne de niveaux d'Activité imbriqués (via Activite.activite_parent)
+    — une seule colonne (« Activité ») par défaut dans le modèle téléchargé,
+    mais rien n'empêche d'en insérer d'autres, librement nommées (ex :
+    « Résultat » puis « Activité »), comme pour l'import de structuration
+    stratégique. Le nom de chaque colonne devient le libellé affiché de ce
+    niveau pour ce projet (voir NiveauActivite), déduit automatiquement au
+    premier import.
     """
-    from .models import Activite, ObjectifGeneral, ObjectifSpecifique, SousActivite
+    from .models import Activite, NiveauActivite, ObjectifGeneral, ObjectifSpecifique, SousActivite
 
     resultat = {
         "objectifs_generaux": 0,
@@ -235,12 +268,14 @@ def importer_planification(feuille, projet) -> dict:
 
     entetes = [str(c).strip() if c else "" for c in lignes[0]]
 
+    entetes_normalises = [_normaliser_entete(e) for e in entetes]
+
     def index(nom):
-        return entetes.index(nom) if nom in entetes else None
+        nom_normalise = _normaliser_entete(nom)
+        return entetes_normalises.index(nom_normalise) if nom_normalise in entetes_normalises else None
 
     idx_og = index("Objectif général")
     idx_os = index("Objectif spécifique")
-    idx_act = index("Activité")
     idx_sa = index("Sous-activité")
     idx_code = index("Code activité")
     idx_valeur_ref = index("Valeur de base")
@@ -249,10 +284,54 @@ def importer_planification(feuille, projet) -> dict:
     idx_unite = index("Unité")
     idx_debut = index("Date début (AAAA-MM-JJ)")
     idx_fin = index("Date fin (AAAA-MM-JJ)")
+    idx_commentaire = index("Commentaire")
 
-    if idx_og is None and idx_os is None and idx_act is None and idx_sa is None:
+    colonnes_fixes = {
+        i
+        for i in (
+            idx_og,
+            idx_os,
+            idx_sa,
+            idx_code,
+            idx_valeur_ref,
+            idx_budget,
+            idx_qte,
+            idx_unite,
+            idx_debut,
+            idx_fin,
+            idx_commentaire,
+        )
+        if i is not None
+    }
+    borne_fin = idx_sa if idx_sa is not None else len(entetes)
+    debut_recherche = (idx_os + 1) if idx_os is not None else 0
+    # Une colonne = un niveau, sans exception ni devinette sur son contenu —
+    # même principe que l'import de structuration stratégique : toute colonne
+    # nommée entre Objectif spécifique et Sous-activité (ou la fin si pas de
+    # Sous-activité) devient un niveau d'Activité imbriqué. Ajouter une
+    # colonne dans cette zone qu'on ne veut PAS voir comme un niveau (une
+    # note, un suivi ponctuel...) la fait donc devenir un niveau — à l'auteur
+    # du fichier de la placer plutôt avant « Objectif général » ou après
+    # « Date fin » si ce n'est pas l'effet voulu.
+    idx_activite_niveaux = [
+        i
+        for i in range(debut_recherche, borne_fin)
+        if i not in colonnes_fixes and entetes[i] and not entetes_normalises[i].startswith("code")
+    ]
+
+    if idx_og is None and idx_os is None and not idx_activite_niveaux and idx_sa is None:
         resultat["erreurs"].append({"ligne": 1, "message": "Aucune colonne de planification reconnue."})
         return resultat
+
+    # Mémorise le nom de chaque colonne « niveau d'activité » rencontrée pour
+    # CE projet (affichage uniquement) — crée les niveaux manquants, ne
+    # renomme jamais un niveau déjà nommé par un import précédent.
+    profondeurs_existantes = set(
+        NiveauActivite.objects.filter(projet=projet).values_list("profondeur", flat=True)
+    )
+    for profondeur, idx in enumerate(idx_activite_niveaux):
+        if profondeur not in profondeurs_existantes:
+            NiveauActivite.objects.create(projet=projet, profondeur=profondeur, nom_niveau=entetes[idx])
 
     def valeur(ligne, idx):
         if idx is None or idx >= len(ligne):
@@ -272,7 +351,7 @@ def importer_planification(feuille, projet) -> dict:
 
     og_actuel = ObjectifGeneral.objects.filter(projet=projet).first()
     os_actuel = None
-    act_actuel = None
+    dernier_par_niveau: list = [None] * len(idx_activite_niveaux)
 
     for numero, ligne in enumerate(lignes[1:], start=2):
         if not any(ligne):
@@ -287,7 +366,7 @@ def importer_planification(feuille, projet) -> dict:
                 og_actuel = ObjectifGeneral.objects.create(projet=projet, libelle=nom)
                 resultat["objectifs_generaux"] += 1
             os_actuel = None
-            act_actuel = None
+            dernier_par_niveau = [None] * len(idx_activite_niveaux)
             continue
 
         if idx_os is not None and valeur(ligne, idx_os):
@@ -301,18 +380,41 @@ def importer_planification(feuille, projet) -> dict:
             os_actuel = existant or ObjectifSpecifique.objects.create(objectif_general=og_actuel, libelle=nom)
             if not existant:
                 resultat["objectifs_specifiques_crees"] += 1
-            act_actuel = None
+            dernier_par_niveau = [None] * len(idx_activite_niveaux)
             continue
 
-        if idx_act is not None and valeur(ligne, idx_act):
+        profondeurs_remplies = [p for p, idx in enumerate(idx_activite_niveaux) if valeur(ligne, idx)]
+        if len(profondeurs_remplies) > 1:
+            resultat["erreurs"].append(
+                {"ligne": numero, "message": "Une seule colonne de niveau d'activité doit être remplie par ligne — ligne ignorée."}
+            )
+            continue
+
+        if profondeurs_remplies:
+            profondeur = profondeurs_remplies[0]
+            idx_colonne = idx_activite_niveaux[profondeur]
             if not os_actuel:
                 resultat["erreurs"].append(
                     {"ligne": numero, "message": "Aucun objectif spécifique défini au-dessus — ligne ignorée."}
                 )
                 continue
-            nom = str(valeur(ligne, idx_act)).strip()
-            existant = Activite.objects.filter(objectif_specifique=os_actuel, libelle__iexact=nom).first()
-            act_actuel = existant or Activite(objectif_specifique=os_actuel, libelle=nom)
+
+            activite_parent = dernier_par_niveau[profondeur - 1] if profondeur > 0 else None
+            if profondeur > 0 and activite_parent is None:
+                nom_niveau_parent = entetes[idx_activite_niveaux[profondeur - 1]]
+                resultat["erreurs"].append(
+                    {
+                        "ligne": numero,
+                        "message": f"Aucun élément « {nom_niveau_parent} » renseigné au-dessus pour rattacher cette ligne — ligne ignorée.",
+                    }
+                )
+                continue
+
+            nom = str(valeur(ligne, idx_colonne)).strip()
+            existant = Activite.objects.filter(
+                objectif_specifique=os_actuel, activite_parent=activite_parent, libelle__iexact=nom
+            ).first()
+            act_actuel = existant or Activite(objectif_specifique=os_actuel, activite_parent=activite_parent, libelle=nom)
             act_actuel.libelle = nom
             if valeur(ligne, idx_code):
                 act_actuel.code_activite = str(valeur(ligne, idx_code)).strip()
@@ -330,12 +432,24 @@ def importer_planification(feuille, projet) -> dict:
             date_fin = date_cellule(ligne, idx_fin)
             if date_fin:
                 act_actuel.date_fin = date_fin
+            if valeur(ligne, idx_commentaire):
+                act_actuel.commentaire = str(valeur(ligne, idx_commentaire)).strip()
+            try:
+                act_actuel.clean()
+            except Exception as exc:  # ValidationError du modèle
+                resultat["erreurs"].append({"ligne": numero, "message": str(exc)})
+                continue
             act_actuel.save()
             if not existant:
                 resultat["activites_creees"] += 1
+
+            dernier_par_niveau[profondeur] = act_actuel
+            for j in range(profondeur + 1, len(dernier_par_niveau)):
+                dernier_par_niveau[j] = None
             continue
 
         if idx_sa is not None and valeur(ligne, idx_sa):
+            act_actuel = next((a for a in reversed(dernier_par_niveau) if a is not None), None)
             if not act_actuel:
                 resultat["erreurs"].append(
                     {"ligne": numero, "message": "Aucune activité définie au-dessus — ligne ignorée."}

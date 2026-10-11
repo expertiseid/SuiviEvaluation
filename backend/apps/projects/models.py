@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError
 from django.db import models
 from simple_history.models import HistoricalRecords
 
@@ -173,11 +174,25 @@ class Activite(TimestampedModel):
     objectif_specifique = models.ForeignKey(
         ObjectifSpecifique, on_delete=models.PROTECT, related_name="activites"
     )
+    activite_parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="enfants",
+        help_text="Permet d'imbriquer un niveau intermédiaire librement nommé (ex : « Résultat ») "
+        "au-dessus d'une activité, sans rien perdre de ce qu'une Activité sait déjà faire (budget, "
+        "suivi, responsables, historique...) — voir NiveauActivite pour le nom affiché de chaque "
+        "profondeur. Toujours rattachée au même objectif_specifique que son parent (voir clean()).",
+    )
     code_activite = models.CharField(
         max_length=30, blank=True, help_text="Codification interne (ex : AI1.1, AI1.1.2)."
     )
     libelle = models.CharField(max_length=300)
     statut = models.CharField(max_length=20, choices=Statut.choices, default=Statut.NON_REALISEE)
+    commentaire = models.TextField(
+        blank=True, help_text="Note libre (ex : validation, remarque) — n'affecte ni le suivi ni les calculs."
+    )
     axe_strategique = models.ForeignKey(
         "strategy.ElementStrategique", null=True, blank=True, on_delete=models.SET_NULL, related_name="activites"
     )
@@ -233,6 +248,18 @@ class Activite(TimestampedModel):
     def __str__(self):
         return self.libelle
 
+    def clean(self):
+        if self.activite_parent_id:
+            if self.activite_parent.objectif_specifique_id != self.objectif_specifique_id:
+                raise ValidationError(
+                    "Une activité doit être rattachée au même objectif spécifique que son activité parente."
+                )
+            ancetre = self.activite_parent
+            while ancetre is not None:
+                if ancetre.pk == self.pk:
+                    raise ValidationError("Une activité ne peut pas être sa propre ancêtre (boucle détectée).")
+                ancetre = ancetre.activite_parent
+
     @property
     def taux_realisation(self):
         if not self.quantite_prevue:
@@ -252,6 +279,33 @@ class Activite(TimestampedModel):
         return bool(
             self.date_fin and self.date_fin < timezone.localdate() and self.statut != self.Statut.REALISEE
         )
+
+
+class NiveauActivite(TimestampedModel):
+    """
+    Nom affiché pour chaque profondeur d'imbrication d'Activité au sein d'un
+    projet (ex : profondeur 0 = « Résultat », profondeur 1 = « Activité ») —
+    purement cosmétique, n'affecte ni le modèle Activite ni son comportement.
+    Profondeur 0 = une Activité sans activite_parent (rattachée directement à
+    un Objectif spécifique) ; chaque profondeur suivante = un niveau
+    d'imbrication (activite_parent) en plus. Sans ligne définie pour une
+    profondeur donnée, l'affichage retombe sur « Activité ».
+    """
+
+    projet = models.ForeignKey(Projet, on_delete=models.CASCADE, related_name="niveaux_activite")
+    profondeur = models.PositiveIntegerField()
+    nom_niveau = models.CharField(max_length=100)
+
+    class Meta:
+        verbose_name = "Niveau d'activité"
+        verbose_name_plural = "Niveaux d'activité"
+        ordering = ("profondeur",)
+        constraints = [
+            models.UniqueConstraint(fields=("projet", "profondeur"), name="niveau_activite_profondeur_unique")
+        ]
+
+    def __str__(self):
+        return f"{self.projet} — niveau {self.profondeur} : {self.nom_niveau}"
 
 
 class SousActivite(TimestampedModel):

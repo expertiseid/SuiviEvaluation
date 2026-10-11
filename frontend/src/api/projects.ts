@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "./client";
-import type { Equipe, ImportProjetResultat, Paginated, Projet, ProjetInput } from "../types";
+import type { Equipe, ImportProjetResultat, NiveauActivite, Paginated, Projet, ProjetInput } from "../types";
 
 export async function telechargerModeleImportProjet() {
   const response = await apiClient.get("/projets/modele-import/", { responseType: "blob" });
@@ -185,6 +185,7 @@ export function useCreateActivite() {
   return useMutation({
     mutationFn: async (payload: {
       objectif_specifique: number;
+      activite_parent?: number | null;
       libelle: string;
       budget_alloue?: number;
       date_debut?: string;
@@ -192,6 +193,44 @@ export function useCreateActivite() {
       responsable?: number;
     }) => (await apiClient.post("/activites/", payload)).data,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projets"] }),
+  });
+}
+
+export function useNiveauxActivite(projetId?: number) {
+  return useQuery({
+    queryKey: ["niveaux-activite", projetId],
+    queryFn: async () =>
+      (await apiClient.get<Paginated<NiveauActivite>>("/niveaux-activite/", { params: { projet: projetId } }))
+        .data.results,
+    enabled: !!projetId,
+  });
+}
+
+export function useCreateNiveauActivite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { projet: number; profondeur: number; nom_niveau: string }) =>
+      (await apiClient.post<NiveauActivite>("/niveaux-activite/", payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["niveaux-activite"] }),
+  });
+}
+
+export function useUpdateNiveauActivite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: { nom_niveau: string } }) =>
+      (await apiClient.patch<NiveauActivite>(`/niveaux-activite/${id}/`, payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["niveaux-activite"] }),
+  });
+}
+
+export function useDeleteNiveauActivite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/niveaux-activite/${id}/`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["niveaux-activite"] }),
   });
 }
 

@@ -10,6 +10,7 @@ import {
   Target,
   MapPin,
   FileSpreadsheet,
+  FileText,
   Sliders,
   type LucideIcon,
 } from "lucide-react";
@@ -33,6 +34,7 @@ const ITEMS_PRINCIPAUX: NavItem[] = [
   { to: "/beneficiaires", label: "Bénéficiaires", icon: Users },
   { to: "/doublons", label: "Doublons signalés", icon: Copy },
   { to: "/zones-administratives", label: "Zones administratives", icon: MapPin },
+  { to: "/documents", label: "Documents", icon: FileText },
 ];
 
 function renderNavLink(item: NavItem, pathname: string) {

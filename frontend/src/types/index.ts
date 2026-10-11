@@ -177,9 +177,11 @@ export interface Equipe {
 export interface Activite {
   id: number;
   objectif_specifique: number;
+  activite_parent: number | null;
   code_activite: string;
   libelle: string;
   statut: StatutActivite;
+  commentaire: string;
   axe_strategique: number | null;
   axe_strategique_libelle: string | null;
   budget_alloue: string | null;
@@ -201,9 +203,17 @@ export interface Activite {
   equipe_responsable: number | null;
   equipe_responsable_nom: string | null;
   sous_activites: SousActivite[];
+  enfants: Activite[];
   taux_realisation: number | null;
   taux_execution_financiere: number | null;
   alerte_retard: boolean;
+}
+
+export interface NiveauActivite {
+  id: number;
+  projet: number;
+  profondeur: number;
+  nom_niveau: string;
 }
 
 export interface ObjectifSpecifique {
@@ -308,6 +318,21 @@ export interface ValeurIndicateur {
   saisi_par_nom: string;
   commentaire: string;
   taux_realisation: number;
+}
+
+export interface TranchePlanifiee {
+  id: number;
+  activite: number | null;
+  activite_libelle: string | null;
+  indicateur: number | null;
+  indicateur_libelle: string | null;
+  libelle: string;
+  periode_debut: string;
+  periode_fin: string;
+  cible: string;
+  realise: string | null;
+  taux: number | null;
+  statut: "ATTEINTE" | "EN_RETARD" | "EN_COURS";
 }
 
 export interface Indicateur {

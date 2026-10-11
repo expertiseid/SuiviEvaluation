@@ -17,6 +17,7 @@ import { CadresStrategiquesListPage } from "./pages/strategie/CadresStrategiques
 import { CadreStrategiqueDetailPage } from "./pages/strategie/CadreStrategiqueDetailPage";
 import { ZonesAdministrativesPage } from "./pages/geo/ZonesAdministrativesPage";
 import { PlanificationImportPage } from "./pages/planification/PlanificationImportPage";
+import { DocumentsGlobauxPage } from "./pages/documents/DocumentsGlobauxPage";
 import { ParametresAlertePage } from "./pages/parametres/ParametresAlertePage";
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/strategie/:id" element={<CadreStrategiqueDetailPage />} />
         <Route path="/zones-administratives" element={<ZonesAdministrativesPage />} />
         <Route path="/planification" element={<PlanificationImportPage />} />
+        <Route path="/documents" element={<DocumentsGlobauxPage />} />
         <Route
           path="/utilisateurs"
           element={

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Autocomplete, Button, Divider, Group, NumberInput, Select, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Autocomplete, Button, Divider, Group, NumberInput, Select, Stack, Text, Textarea, TextInput } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
 import { useCreateActivite, useCreateEquipe, useEquipes, useUpdateActivite } from "../../api/projects";
@@ -12,6 +12,7 @@ import type { Activite, Intervenant } from "../../types";
 
 export function ActiviteForm({
   objectifSpecifiqueId,
+  activiteParentId,
   cadreStrategiqueId,
   projetId,
   budgetProjetTotal,
@@ -20,6 +21,8 @@ export function ActiviteForm({
   onDone,
 }: {
   objectifSpecifiqueId: number;
+  /** Si fourni, l'activité créée est imbriquée sous celle-ci (voir Activite.activite_parent). */
+  activiteParentId?: number;
   cadreStrategiqueId: number | null;
   projetId: number;
   budgetProjetTotal: number;
@@ -67,6 +70,7 @@ export function ActiviteForm({
   const [dateDebut, setDateDebut] = useState<string | null>(activite?.date_debut ?? null);
   const [dateFin, setDateFin] = useState<string | null>(activite?.date_fin ?? null);
   const [dateRappel, setDateRappel] = useState<string | null>(activite?.date_rappel ?? null);
+  const [commentaire, setCommentaire] = useState(activite?.commentaire ?? "");
 
   const budgetRestant = budgetProjetTotal - budgetDejaAlloue;
   const budgetAllouNumber = budgetAlloue === "" ? 0 : Number(budgetAlloue);
@@ -111,6 +115,7 @@ export function ActiviteForm({
     }
     const payload = {
       objectif_specifique: objectifSpecifiqueId,
+      activite_parent: activiteParentId ?? null,
       code_activite: codeActivite,
       libelle: libelle.trim(),
       axe_strategique: axeStrategique ? Number(axeStrategique) : null,
@@ -123,6 +128,7 @@ export function ActiviteForm({
       date_debut: dateDebut,
       date_fin: dateFin,
       date_rappel: dateRappel,
+      commentaire,
     };
     try {
       if (enEdition) {
@@ -197,6 +203,13 @@ export function ActiviteForm({
         />
         <NumberInput label="Quantité prévue (cible)" value={quantitePrevue} onChange={setQuantitePrevue} min={0} />
       </Group>
+      <Textarea
+        label="Commentaire"
+        description="Note libre (ex : validation, remarque) — n'affecte ni le suivi ni les calculs."
+        minRows={2}
+        value={commentaire}
+        onChange={(e) => setCommentaire(e.currentTarget.value)}
+      />
       <Select
         label="Élément stratégique"
         description={
